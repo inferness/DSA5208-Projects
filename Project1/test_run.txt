@@ -20,6 +20,6 @@ docker run --rm -it \
   -v "$PWD":/app \
   -w /app \
   python:3.11-slim \
-  bash -c "pip install pymongo && python test_mr_causal.py"
+  bash -c "pip install pymongo && python test_mr_single_client.py"
 
 
