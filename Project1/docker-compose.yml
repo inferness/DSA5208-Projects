@@ -1,0 +1,50 @@
+services:
+  mongo1:
+    image: mongo:latest
+    container_name: mongo1
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27017:27017"
+    networks:
+      - mongoCluster
+
+  mongo2:
+    image: mongo:latest
+    container_name: mongo2
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27018:27017"
+    networks:
+      - mongoCluster
+
+  mongo3:
+    image: mongo:latest
+    container_name: mongo3
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27019:27017"
+    networks:
+      - mongoCluster
+
+  mongo4:
+    image: mongo:latest
+    container_name: mongo4
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27020:27017"
+    networks:
+      - mongoCluster
+
+  mongo5:
+    image: mongo:latest
+    container_name: mongo5
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27021:27017"
+    networks:
+      - mongoCluster
+
+networks:
+  mongoCluster:
+    name: mongoCluster
+    driver: bridge

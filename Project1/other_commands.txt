@@ -1,0 +1,83 @@
+### ==============================================================================
+### Real-Life Network Latency Simulation via Docker (tc / netem)
+### Keeps nodes completely unhidden and visible to all drivers/clients!
+### ==============================================================================
+
+# Add 1000ms delay to mongo3, mongo4, and mongo5 (leaving mongo2 fast)
+docker run --rm --privileged --net=container:mongo3 nicolaka/netshoot tc qdisc add dev eth0 root netem delay 1000ms
+docker run --rm --privileged --net=container:mongo4 nicolaka/netshoot tc qdisc add dev eth0 root netem delay 1000ms
+docker run --rm --privileged --net=container:mongo5 nicolaka/netshoot tc qdisc add dev eth0 root netem delay 1000ms
+
+# Check current network delay on nodes
+docker run --rm --net=container:mongo3 nicolaka/netshoot tc qdisc show dev eth0
+docker run --rm --net=container:mongo4 nicolaka/netshoot tc qdisc show dev eth0
+docker run --rm --net=container:mongo5 nicolaka/netshoot tc qdisc show dev eth0
+
+# Remove / reset network latency on nodes
+docker run --rm --privileged --net=container:mongo3 nicolaka/netshoot tc qdisc del dev eth0 root
+docker run --rm --privileged --net=container:mongo4 nicolaka/netshoot tc qdisc del dev eth0 root
+docker run --rm --privileged --net=container:mongo5 nicolaka/netshoot tc qdisc del dev eth0 root
+
+
+### ==============================================================================
+### Alternative: MongoDB Internal Secondary Delay (Requires hidden: true in Mongo)
+### ==============================================================================
+### Induces artificial replication delay on mongo5
+docker exec -it mongo1 mongosh --eval '
+cfg = rs.conf();
+var m5 = cfg.members.find(m => m.host.includes("mongo5"));
+if (m5) {
+  m5.priority = 0;
+  m5.hidden = true;
+  m5.secondaryDelaySecs = 2; // 2 seconds replication delay
+  rs.reconfig(cfg);
+  print("mongo5 successfully configured with 2s delay!");
+} else {
+  print("mongo5 not found in rs.conf()!");
+}'
+
+### Check configuration (Host, State/Role, Tags, Delay)
+docker exec -it mongo1 mongosh --eval '
+var conf = rs.conf();
+var status = rs.status();
+conf.members.map(m => {
+  var s = status.members.find(sm => sm._id === m._id);
+  return {
+    host: m.host,
+    state: s ? s.stateStr : "UNKNOWN",
+    tags: m.tags,
+    delay: m.secondaryDelaySecs
+  };
+})
+'
+
+
+### Reset/remove delay
+docker exec -it mongo1 mongosh --eval '
+cfg = rs.conf();
+var m5 = cfg.members.find(m => m.host.includes("mongo5"));
+if (m5) {
+  m5.priority = 1;
+  m5.hidden = false;
+  m5.secondaryDelaySecs = 0;
+  rs.reconfig(cfg);
+  print("mongo5 restored to normal!");
+}'
+
+
+### Set replica tags
+docker exec -it mongo1 mongosh --eval '
+cfg = rs.conf();
+
+cfg.members.forEach(m => {
+  if (m.host.includes("mongo5")) {
+    m.tags = { "tier": "lagged" };
+  } else {
+    m.tags = { "tier": "fast" };
+  }
+});
+
+rs.reconfig(cfg);
+print("Tags successfully assigned to all members!");
+'
+

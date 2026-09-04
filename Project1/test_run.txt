@@ -1,0 +1,25 @@
+# Run Read-Your-Writes (RYW) Test
+docker run --rm -it \
+  --network mongoCluster \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo && python test_ryw.py"
+
+# Run Monotonic Reads (MR) Test
+docker run --rm -it \
+  --network mongoCluster \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo && python test_mr.py"
+
+# Run Monotonic Reads with Causal Consistency Test
+docker run --rm -it \
+  --network mongoCluster \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo && python test_mr_causal.py"
+
+

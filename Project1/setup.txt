@@ -1,0 +1,61 @@
+==============================================================================
+ MongoDB Replica Set (5 Nodes) Setup Guide (Fresh Install)
+==============================================================================
+
+Prerequisites:
+  - Docker and Docker Compose installed and running.
+  - Navigate to the project root directory containing docker-compose.yml.
+
+------------------------------------------------------------------------------
+Step 1: Start Docker Containers
+------------------------------------------------------------------------------
+Start all 5 MongoDB containers (mongo1 to mongo5) in detached mode:
+
+docker compose up -d
+
+(Wait 5-10 seconds to allow all MongoDB instances to boot up completely)
+
+------------------------------------------------------------------------------
+Step 2: Initialize Replica Set (rs0)
+------------------------------------------------------------------------------
+Run rs.initiate() via mongosh inside the mongo1 container to configure all 5 members:
+
+docker exec -it mongo1 mongosh --eval 'rs.initiate({
+  _id: "rs0",
+  members: [
+    { _id: 0, host: "mongo1:27017" },
+    { _id: 1, host: "mongo2:27017" },
+    { _id: 2, host: "mongo3:27017" },
+    { _id: 3, host: "mongo4:27017" },
+    { _id: 4, host: "mongo5:27017" }
+  ]
+})'
+
+------------------------------------------------------------------------------
+Step 3: Verify Cluster Status
+------------------------------------------------------------------------------
+Check that the replica set has formed properly (one node should transition to PRIMARY, others to SECONDARY):
+
+docker exec -it mongo1 mongosh --eval 'rs.status()'
+
+Or check member summary only:
+docker exec -it mongo1 mongosh --eval 'rs.status().members.map(m => ({ name: m.name, stateStr: m.stateStr }))'
+
+==============================================================================
+Helpful Maintenance Commands
+==============================================================================
+
+# Check running containers:
+docker compose ps
+
+# View container logs:
+docker compose logs -f
+
+# Stop containers (preserves data):
+docker compose stop
+
+# Restart stopped containers:
+docker compose start
+
+# Teardown / Complete Fresh Reset (deletes containers and networks):
+docker compose down -v
