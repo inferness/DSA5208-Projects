@@ -1,6 +1,7 @@
 ### For the monotonic reads test, we need to setup a few more things
 
-#### Create a replica set with priority and tags
+#### Create a replica set with priority and tags if the network has not been created
+If already exists, use the one below this one
 docker exec -it mongo1 mongosh --eval '
 rs.initiate({
   _id: "rs0",
@@ -12,8 +13,21 @@ rs.initiate({
     { _id: 3, host: "mongo4:27017", priority: 1, tags: { tier: "fast" } },
     { _id: 4, host: "mongo5:27017", priority: 0, tags: { tier: "lagged" } }
   ]
-})
-'
+})'
+
+docker exec -it mongo1 mongosh --eval '
+cfg = rs.conf();
+cfg.members.forEach(m => {
+  if (m.host.includes("mongo5")) {
+    m.tags = { tier: "lagged" };
+    m.priority = 0;
+  } else {
+    m.tags = { tier: "fast" };
+  }
+});
+rs.reconfig(cfg);
+print("Replica tags successfully applied!");'
+
 
 
 # 1. Get mongo5's IP address
@@ -23,7 +37,10 @@ MONGO5_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{
 docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 root handle 1: prio
 
 # 3. Add the 3000ms delay to traffic band 3
-docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 parent 1:3 handle 30: netem delay 3000ms
+docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 parent 1:3 handle 30: netem delay 1500ms
 
 # 4. Route traffic matching mongo5's IP into the delayed band
 docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc filter add dev eth0 protocol ip parent 1:0 u32 match ip dst $MONGO5_IP flowid 1:3
+
+### Test that the delay has been induced
+docker run --rm --net=container:mongo1 nicolaka/netshoot ping -c 3 mongo5
