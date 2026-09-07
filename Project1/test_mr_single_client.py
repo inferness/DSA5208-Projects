@@ -13,7 +13,7 @@ CLUSTER_URI = (
 
 DB_NAME = "mr_test_db"
 COLL_NAME = "records"
-NUM_ITERATIONS = 1  # change to 30 for full test
+NUM_ITERATIONS = 30  # change to 30 for full test
 
 # Define read preferences using replica set tags
 FAST_PREF = Secondary(tag_sets=[{'tier': 'fast'}])
@@ -201,7 +201,7 @@ def main():
             name=tc["name"],
             write_concern=tc["wc"],
             read_concern=tc["rc"],
-            causal_consistency=True  # You can toggle this to True to see causal consistency in action
+            causal_consistency=False  # You can toggle this to True to see causal consistency in action
         )
         all_results.append(res)
 

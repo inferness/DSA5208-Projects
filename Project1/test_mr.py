@@ -15,7 +15,7 @@ LAGGED_NODE_URI = "mongodb://mongo5:27017/?directConnection=true"
 
 DB_NAME = "mr_test_db"
 COLL_NAME = "records"
-NUM_ITERATIONS = 1  # 30 repetitions per test case
+NUM_ITERATIONS = 50  # 30 repetitions per test case
 
 def cleanup_db(client):
     """Drops the test collection/database to ensure clean slate."""

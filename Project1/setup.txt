@@ -32,9 +32,26 @@ docker exec -it mongo1 mongosh --eval 'rs.initiate({
 })'
 
 ------------------------------------------------------------------------------
-Step 3: Verify Cluster Status
+Step 3: Ensure mongo1 is PRIMARY (Set Priority)
 ------------------------------------------------------------------------------
-Check that the replica set has formed properly (one node should transition to PRIMARY, others to SECONDARY):
+Set mongo1 to a higher priority (e.g., priority: 2) so the replica set elects it as PRIMARY:
+
+docker exec -it mongo1 mongosh "mongodb://mongo1:27017/?replicaSet=rs0" --eval '
+cfg = rs.conf();
+cfg.members.forEach(m => {
+  m.priority = m.host.includes("mongo1") ? 2 : 1;
+});
+rs.reconfig(cfg);
+'
+
+*(Note: Connecting via "mongodb://mongo1:27017/?replicaSet=rs0" ensures the command is sent directly to whichever node is currently the PRIMARY to apply the reconfiguration.)*
+
+*(Tip: You can also set `{ _id: 0, host: "mongo1:27017", priority: 2 }` directly during `rs.initiate()` in Step 2.)*
+
+------------------------------------------------------------------------------
+Step 4: Verify Cluster Status
+------------------------------------------------------------------------------
+Check that the replica set has formed properly (mongo1 should now be PRIMARY, others SECONDARY):
 
 docker exec -it mongo1 mongosh --eval 'rs.status()'
 

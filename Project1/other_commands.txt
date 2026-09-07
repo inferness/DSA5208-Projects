@@ -40,16 +40,17 @@ if (m5) {
 docker exec -it mongo1 mongosh --eval '
 var conf = rs.conf();
 var status = rs.status();
-conf.members.map(m => {
+console.table(conf.members.map(m => {
   var s = status.members.find(sm => sm._id === m._id);
   return {
     host: m.host,
     state: s ? s.stateStr : "UNKNOWN",
-    tags: m.tags,
-    delay: m.secondaryDelaySecs
+    tags: JSON.stringify(m.tags),
+    priority: m.priority,
+    delay: m.secondaryDelaySecs || 0
   };
-})
-'
+}))'
+
 
 
 ### Reset/remove delay
