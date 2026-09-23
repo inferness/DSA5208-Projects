@@ -36,11 +36,48 @@ MONGO5_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{
 # 2. Create the priority queue on mongo1
 docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 root handle 1: prio
 
-# 3. Add the 3000ms delay to traffic band 3
-docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 parent 1:3 handle 30: netem delay 1500ms
+# 3. Add the delay to traffic band 3
+docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc qdisc add dev eth0 parent 1:3 handle 30: netem delay 200ms
 
 # 4. Route traffic matching mongo5's IP into the delayed band
 docker run --rm --cap-add=NET_ADMIN --net=container:mongo1 nicolaka/netshoot tc filter add dev eth0 protocol ip parent 1:0 u32 match ip dst $MONGO5_IP flowid 1:3
 
 ### Test that the delay has been induced
 docker run --rm --net=container:mongo1 nicolaka/netshoot ping -c 3 mongo5
+
+------------------------------------------------------------------------------
+### For the Monotonic Reads Under 2-3 Network Partition Experiment
+------------------------------------------------------------------------------
+
+#### Step 1: Apply Replica Set Tags for 2-3 Network Partition
+docker exec -it mongo1 mongosh --eval '
+cfg = rs.conf();
+cfg.members.forEach(m => {
+  if (m.host.includes("mongo1")) {
+    m.priority = 2;
+    m.tags = { partition: "minority", role: "primary_side" };
+  } else if (m.host.includes("mongo2")) {
+    m.priority = 1;
+    m.tags = { partition: "minority", role: "first_reader", reader: "first" };
+  } else if (m.host.includes("mongo3")) {
+    m.priority = 1;
+    m.tags = { partition: "majority" };
+  } else if (m.host.includes("mongo4")) {
+    m.priority = 1;
+    m.tags = { partition: "majority" };
+  } else if (m.host.includes("mongo5")) {
+    m.priority = 1;
+    m.tags = { partition: "majority" };
+  }
+});
+rs.reconfig(cfg);
+print("Replica tags for 2-3 partition successfully applied!");'
+
+#### Step 2: Install tools inside containers (one-time setup if needed)
+for c in mongo1 mongo2 mongo3 mongo4 mongo5; do
+  docker exec -u 0 $c apt-get update -qq && docker exec -u 0 $c apt-get install -y -qq iptables iproute2 iputils-ping
+done
+
+#### Step 3: Run the Monotonic Reads Under Network Partition Test
+# (See test_run.txt)
+

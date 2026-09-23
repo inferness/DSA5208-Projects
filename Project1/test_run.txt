@@ -22,4 +22,38 @@ docker run --rm -it \
   python:3.11-slim \
   bash -c "pip install pymongo && python test_mr_single_client.py"
 
+# Run Read-Your-Writes Under Primary Failover Test
+docker run --rm -it \
+  --network mongoCluster \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo docker && python test_ryw_primary_failover.py"
 
+# Run Read-Your-Writes Under Network Partition Test (Partition Before Write)
+docker run --rm -it \
+  --network mongoCluster \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo docker && python test_ryw_network_partition.py"
+
+# Run MR primary Failure test
+docker run --rm -it \
+  --network mongoCluster \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo docker && python test_mr_primary_failure.py"
+
+# Run MR Network Partition test
+docker run --rm -it \
+  --network mongoCluster \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD":/app \
+  -w /app \
+  python:3.11-slim \
+  bash -c "pip install pymongo docker && python test_mr_network_partition.py"

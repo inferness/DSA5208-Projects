@@ -1,0 +1,82 @@
+==============================================================================
+ MongoDB 2–3 Network Partition Setup & Verification Guide
+==============================================================================
+
+Cluster Partition Structure:
+  - Minority Partition: mongo1, mongo2
+  - Majority Partition: mongo3, mongo4, mongo5
+
+------------------------------------------------------------------------------
+Step 1: Install iptables & ping inside all containers (One-time setup)
+------------------------------------------------------------------------------
+Ensure iptables and ping tools are installed inside all 5 running containers:
+
+for c in mongo1 mongo2 mongo3 mongo4 mongo5; do
+  docker exec -u 0 $c apt-get update -qq && docker exec -u 0 $c apt-get install -y -qq iptables iputils-ping
+done
+
+------------------------------------------------------------------------------
+Step 2: Apply the 2–3 Network Partition
+------------------------------------------------------------------------------
+Run the following script to discover container IPs and drop inter-group traffic:
+
+# 1. Grab container IPs
+IP1=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo1)
+IP2=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo2)
+IP3=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo3)
+IP4=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo4)
+IP5=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo5)
+
+echo "Partitioning Minority (mongo1, mongo2) from Majority (mongo3, mongo4, mongo5)..."
+
+# 2. Minority side: block traffic to/from mongo3, mongo4, mongo5
+for c in mongo1 mongo2; do
+  for ip in $IP3 $IP4 $IP5; do
+    docker exec -u 0 $c iptables -I INPUT -s $ip -j DROP
+    docker exec -u 0 $c iptables -I OUTPUT -d $ip -j DROP
+  done
+done
+
+# 3. Majority side: block traffic to/from mongo1, mongo2
+for c in mongo3 mongo4 mongo5; do
+  for ip in $IP1 $IP2; do
+    docker exec -u 0 $c iptables -I INPUT -s $ip -j DROP
+    docker exec -u 0 $c iptables -I OUTPUT -d $ip -j DROP
+  done
+done
+
+echo "Partition established successfully."
+
+------------------------------------------------------------------------------
+Step 3: Test Network Connectivity (Ping Verification)
+------------------------------------------------------------------------------
+# Test communication within the SAME partition (SHOULD SUCCEED - 0% loss):
+docker exec mongo1 ping -c 2 -W 1 mongo2
+docker exec mongo3 ping -c 2 -W 1 mongo4
+
+# Test communication ACROSS partitions (SHOULD FAIL - 100% packet loss):
+docker exec mongo1 ping -c 2 -W 1 mongo3
+
+------------------------------------------------------------------------------
+Step 4: Verify Cluster Stabilization & Topology (Wait ~10–12s for election)
+------------------------------------------------------------------------------
+1. Check Minority side (mongo1 / mongo2):
+   docker exec -it mongo1 mongosh --eval 'rs.status().members.map(m => ({ name: m.name, stateStr: m.stateStr }))'
+   => Expected: Both mongo1 and mongo2 are SECONDARY (no writable PRIMARY).
+
+2. Check Majority side (mongo3 / mongo4 / mongo5):
+   docker exec -it mongo3 mongosh --eval 'rs.status().members.map(m => ({ name: m.name, stateStr: m.stateStr }))'
+   => Expected: Exactly ONE node is PRIMARY, other two are SECONDARY.
+                mongo1 and mongo2 will show unreachable/down.
+
+------------------------------------------------------------------------------
+Step 5: Heal the Network Partition (Restore Full Connectivity)
+------------------------------------------------------------------------------
+When you want to remove all partition rules and reconnect the cluster:
+
+for c in mongo1 mongo2 mongo3 mongo4 mongo5; do
+  docker exec -u 0 $c iptables -F
+done
+
+# Wait ~5-10 seconds for cluster to re-converge, then check status:
+docker exec -it mongo1 mongosh --eval 'rs.status().members.map(m => ({ name: m.name, stateStr: m.stateStr }))'

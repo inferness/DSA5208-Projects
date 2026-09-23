@@ -41,8 +41,7 @@ cfg = rs.conf();
 cfg.members.forEach(m => {
   m.priority = m.host.includes("mongo1") ? 2 : 1;
 });
-rs.reconfig(cfg);
-'
+rs.reconfig(cfg);'
 
 *(Note: Connecting via "mongodb://mongo1:27017/?replicaSet=rs0" ensures the command is sent directly to whichever node is currently the PRIMARY to apply the reconfiguration.)*
 

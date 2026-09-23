@@ -124,12 +124,17 @@ def main():
             "rc": ReadConcern("majority")
         },
         {
-            "name": "Case 2: W=1, R=majority",
+            "name": "Case 2: W=majority, R=local",
+            "wc": WriteConcern(w="majority", wtimeout=5000),
+            "rc": ReadConcern("local")
+        },
+        {
+            "name": "Case 3: W=1, R=majority",
             "wc": WriteConcern(w=1),
             "rc": ReadConcern("majority")
         },
         {
-            "name": "Case 3: W=1, R=local",
+            "name": "Case 4: W=1, R=local",
             "wc": WriteConcern(w=1),
             "rc": ReadConcern("local")
         }
