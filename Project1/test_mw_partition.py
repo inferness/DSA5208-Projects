@@ -26,11 +26,13 @@ COORD_DIR = Path("/app/mw_partition_coord")
 SIGNAL_TIMEOUT_SECONDS = 240
 ELECTION_TIMEOUT_SECONDS = 90
 RECOVERY_TIMEOUT_SECONDS = 120
+W2_SOCKET_TIMEOUT_MS = 60000
 
 
 SCENARIOS = [
     {
         "id": "NP1",
+        "configuration": "R=majority, W=majority",
         "name": "W1 before partition: R=majority, W=majority",
         "timing": "before",
         "read_concern": ReadConcern("majority"),
@@ -39,6 +41,7 @@ SCENARIOS = [
     },
     {
         "id": "NP2",
+        "configuration": "R=local, W=majority",
         "name": "W1 before partition: R=local, W=majority",
         "timing": "before",
         "read_concern": ReadConcern("local"),
@@ -47,6 +50,7 @@ SCENARIOS = [
     },
     {
         "id": "NP3",
+        "configuration": "R=local, W=1",
         "name": "W1 before partition: R=local, W=1",
         "timing": "before",
         "read_concern": ReadConcern("local"),
@@ -55,6 +59,7 @@ SCENARIOS = [
     },
     {
         "id": "NP4",
+        "configuration": "R=local, W=1",
         "name": "W1 after partition on old primary: R=local, W=1",
         "timing": "after",
         "read_concern": ReadConcern("local"),
@@ -63,6 +68,7 @@ SCENARIOS = [
     },
     {
         "id": "NP5",
+        "configuration": "R=local, W=majority",
         "name": "W1 after partition on old primary: R=local, W=majority",
         "timing": "after",
         "read_concern": ReadConcern("local"),
@@ -72,6 +78,12 @@ SCENARIOS = [
         "w2_write_concern": WriteConcern(w="majority", wtimeout=30000),
     },
 ]
+
+SELECTED_CASE = os.environ.get("SELECTED_CASE", "").strip().upper()
+if SELECTED_CASE:
+    SCENARIOS = [item for item in SCENARIOS if item["id"] == SELECTED_CASE]
+    if not SCENARIOS:
+        raise ValueError(f"Unknown SELECTED_CASE: {SELECTED_CASE}")
 
 
 def atomic_write(path, text):
@@ -159,6 +171,33 @@ def wait_for_majority_side_ready(client, majority_nodes, timeout_seconds=45):
     raise TimeoutError(
         "The three-node majority side did not become replication-ready. "
         f"Last visible state: {last_status}"
+    )
+
+
+def wait_for_majority_write_ready(client, step, timeout_seconds=60):
+    """Confirm that the new primary can complete an actual majority write."""
+    collection = client[DB_NAME].get_collection(
+        "readiness_probes",
+        write_concern=WriteConcern(w="majority", wtimeout=10000),
+    )
+    started = time.time()
+    last_error = None
+
+    while time.time() - started < timeout_seconds:
+        try:
+            collection.replace_one(
+                {"_id": f"step-{step}"},
+                {"_id": f"step-{step}", "ready_at": time.time()},
+                upsert=True,
+            )
+            return
+        except PyMongoError as error:
+            last_error = error
+            time.sleep(1)
+
+    raise TimeoutError(
+        "The new primary could not complete a majority readiness write. "
+        f"Last error: {last_error}"
     )
 
 
@@ -307,12 +346,15 @@ def run_iteration(client, scenario, step):
             new_primary_uri,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
-            socketTimeoutMS=15000,
+            # Must exceed W2's 30-second majority write-concern timeout.
+            socketTimeoutMS=W2_SOCKET_TIMEOUT_MS,
             retryWrites=False,
         )
         new_primary_client.admin.command("ping")
         print("Waiting for all three majority-side members to be replication-ready...")
         wait_for_majority_side_ready(new_primary_client, majority_nodes)
+        print("Confirming that the new primary can complete a majority write...")
+        wait_for_majority_write_ready(new_primary_client, step)
         new_primary_collection = new_primary_client[DB_NAME].get_collection(
             COLL_NAME, write_concern=scenario["w2_write_concern"]
         )
@@ -415,6 +457,7 @@ def summarize(scenario, results):
     attempted_operations = 2 * len(results)
     return {
         "id": scenario["id"],
+        "configuration": scenario["configuration"],
         "consistency": (passes / len(valid) * 100) if valid else None,
         "availability": (
             acknowledged_operations / attempted_operations * 100
@@ -430,25 +473,25 @@ def summarize(scenario, results):
 
 
 def print_summary(summaries):
-    print("\n" + "=" * 126)
+    print("\n" + "=" * 162)
     print("MONOTONIC WRITES — NETWORK PARTITION SUMMARY")
-    print("=" * 126)
+    print("=" * 162)
     print(
-        f"{'Case':<5} | {'MW Pass':<9} | {'Available':<10} | "
+        f"{'Case':<5} | {'Configuration':<25} | {'MW Pass':<9} | {'Available':<10} | "
         f"{'Violations':<10} | {'Valid':<5} | {'Avg W1':<11} | "
         f"{'Avg W2':<11} | {'Election':<12} | {'Avg Read':<11}"
     )
-    print("-" * 126)
+    print("-" * 162)
     for item in summaries:
         consistency = "N/A" if item["consistency"] is None else f"{item['consistency']:.1f}%"
         print(
-            f"{item['id']:<5} | {consistency:>9} | "
+            f"{item['id']:<5} | {item['configuration']:<25} | {consistency:>9} | "
             f"{item['availability']:>8.1f}% | {item['violations']:>10} | "
             f"{item['valid']:>5} | {item['avg_w1']:>7.2f} ms | "
             f"{item['avg_w2']:>7.2f} ms | {item['avg_election']:>8.2f} ms | "
             f"{item['avg_read']:>7.2f} ms"
         )
-    print("=" * 126)
+    print("=" * 162)
 
 
 def main():
@@ -456,9 +499,10 @@ def main():
     prepare_coordination(total_steps)
     client = MongoClient(
         URI,
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=5000,
-        socketTimeoutMS=15000,
+        serverSelectionTimeoutMS=10000,
+        connectTimeoutMS=10000,
+        # Recovery and final verification can exceed 15 seconds after NP5.
+        socketTimeoutMS=60000,
         retryWrites=False,
     )
     client.admin.command("ping")

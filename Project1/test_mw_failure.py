@@ -532,7 +532,7 @@ def summarize_scenario(scenario_name, results):
 
 def print_summary_table(summaries):
     print()
-    print("=" * 119)
+    print("=" * 128)
     print(
         "                         "
         "MONOTONIC WRITES — PRIMARY FAILURE SUMMARY"
@@ -540,7 +540,8 @@ def print_summary_table(summaries):
     print("=" * 119)
 
     print(
-        f"{'Scenario':<31} | "
+        f"{'Case':<5} | "
+        f"{'Configuration':<25} | "
         f"{'MW Pass':<9} | "
         f"{'Available':<10} | "
         f"{'Violations':<10} | "
@@ -549,11 +550,12 @@ def print_summary_table(summaries):
         f"{'Avg Read':<11}"
     )
 
-    print("-" * 119)
+    print("-" * 128)
 
     for summary in summaries:
         print(
-            f"{summary['scenario']:<31} | "
+            f"{summary['id']:<5} | "
+            f"{summary['configuration']:<25} | "
             f"{summary['consistency_rate']:>6.1f}%   | "
             f"{summary['availability_rate']:>6.1f}%    | "
             f"{summary['violations']:>10} | "
@@ -562,7 +564,7 @@ def print_summary_table(summaries):
             f"{summary['avg_read']:>7.3f} ms"
         )
 
-    print("=" * 119)
+    print("=" * 128)
 
 
 # ------------------------------------------------------------
@@ -572,6 +574,7 @@ def print_summary_table(summaries):
 def main():
     scenarios = [
         {
+            "id": "PF1",
             "name": "R=majority, W=majority",
             "read_concern": ReadConcern("majority"),
             "write_concern": WriteConcern(
@@ -580,6 +583,7 @@ def main():
             )
         },
         {
+            "id": "PF2",
             "name": "R=local, W=majority",
             "read_concern": ReadConcern("local"),
             "write_concern": WriteConcern(
@@ -588,6 +592,7 @@ def main():
             )
         },
         {
+            "id": "PF3",
             "name": "R=local, W=1",
             "read_concern": ReadConcern("local"),
             "write_concern": WriteConcern(w=1)
@@ -647,6 +652,9 @@ def main():
             scenario["name"],
             scenario_results
         )
+
+        summary["id"] = scenario["id"]
+        summary["configuration"] = scenario["name"]
 
         all_summaries.append(summary)
 

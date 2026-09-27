@@ -27,11 +27,13 @@ SIGNAL_TIMEOUT_SECONDS = 240
 ELECTION_TIMEOUT_SECONDS = 90
 RECOVERY_TIMEOUT_SECONDS = 120
 W2_SOCKET_TIMEOUT_MS = 60000
+READ_VISIBILITY_TIMEOUT_SECONDS = 10
 
 
 SCENARIOS = [
     {
         "id": "NP1",
+        "configuration": "R=majority, W=majority",
         "name": "W1 before partition: R=majority, W=majority",
         "timing": "before",
         "read_concern": ReadConcern("majority"),
@@ -40,6 +42,16 @@ SCENARIOS = [
     },
     {
         "id": "NP2",
+        "configuration": "R=majority, W=1",
+        "name": "W1 before partition: R=majority, W=1",
+        "timing": "before",
+        "read_concern": ReadConcern("majority"),
+        "w1_write_concern": WriteConcern(w=1),
+        "w2_write_concern": WriteConcern(w=1),
+    },
+    {
+        "id": "NP3",
+        "configuration": "R=local, W=majority",
         "name": "W1 before partition: R=local, W=majority",
         "timing": "before",
         "read_concern": ReadConcern("local"),
@@ -47,7 +59,8 @@ SCENARIOS = [
         "w2_write_concern": WriteConcern(w="majority", wtimeout=30000),
     },
     {
-        "id": "NP3",
+        "id": "NP4",
+        "configuration": "R=local, W=1",
         "name": "W1 before partition: R=local, W=1",
         "timing": "before",
         "read_concern": ReadConcern("local"),
@@ -55,7 +68,8 @@ SCENARIOS = [
         "w2_write_concern": WriteConcern(w=1),
     },
     {
-        "id": "NP4",
+        "id": "NP5",
+        "configuration": "R=local, W=1",
         "name": "W1 after partition on old primary: R=local, W=1",
         "timing": "after",
         "read_concern": ReadConcern("local"),
@@ -63,7 +77,8 @@ SCENARIOS = [
         "w2_write_concern": WriteConcern(w=1),
     },
     {
-        "id": "NP5",
+        "id": "NP6",
+        "configuration": "R=local, W=majority",
         "name": "W1 after partition on old primary: R=local, W=majority",
         "timing": "after",
         "read_concern": ReadConcern("local"),
@@ -72,7 +87,22 @@ SCENARIOS = [
         # W2 is sent to the valid majority side and gets a normal deadline.
         "w2_write_concern": WriteConcern(w="majority", wtimeout=30000),
     },
+    {
+        "id": "NP7",
+        "configuration": "R=majority, W=1",
+        "name": "W1 after partition on old primary: R=majority, W=1",
+        "timing": "after",
+        "read_concern": ReadConcern("majority"),
+        "w1_write_concern": WriteConcern(w=1),
+        "w2_write_concern": WriteConcern(w=1),
+    },
 ]
+
+SELECTED_CASE = os.environ.get("SELECTED_CASE", "").strip().upper()
+if SELECTED_CASE:
+    SCENARIOS = [item for item in SCENARIOS if item["id"] == SELECTED_CASE]
+    if not SCENARIOS:
+        raise ValueError(f"Unknown SELECTED_CASE: {SELECTED_CASE}")
 
 
 def atomic_write(path, text):
@@ -312,21 +342,31 @@ def attempt_write(collection, document, session):
 
 def attempt_read(collection, query, session):
     started = time.perf_counter()
-    try:
-        document = collection.find_one(query, session=session)
-        return {
-            "succeeded": document is not None,
-            "document": document,
-            "error": None,
-            "latency_ms": (time.perf_counter() - started) * 1000,
-        }
-    except PyMongoError as error:
-        return {
-            "succeeded": False,
-            "document": None,
-            "error": f"{type(error).__name__}: {error}",
-            "latency_ms": (time.perf_counter() - started) * 1000,
-        }
+    deadline = time.monotonic() + READ_VISIBILITY_TIMEOUT_SECONDS
+    last_error = None
+
+    while time.monotonic() < deadline:
+        try:
+            document = collection.find_one(
+                query, session=session, max_time_ms=2000
+            )
+            if document is not None:
+                return {
+                    "succeeded": True,
+                    "document": document,
+                    "error": None,
+                    "latency_ms": (time.perf_counter() - started) * 1000,
+                }
+        except PyMongoError as error:
+            last_error = f"{type(error).__name__}: {error}"
+        time.sleep(0.1)
+
+    return {
+        "succeeded": False,
+        "document": None,
+        "error": last_error,
+        "latency_ms": (time.perf_counter() - started) * 1000,
+    }
 
 
 def run_iteration(client, scenario, step):
@@ -410,7 +450,7 @@ def run_iteration(client, scenario, step):
                         producer_session,
                     )
                 # WFR is established by Client B observing W1, not by Client
-                # A receiving an acknowledgement. Therefore NP5 still tries
+                # A receiving an acknowledgement. Therefore NP6 still tries
                 # the local read after the majority write times out.
                 with direct_client.start_session(causal_consistency=True) as old_session:
                     read_w1 = attempt_read(
@@ -443,7 +483,7 @@ def run_iteration(client, scenario, step):
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
             # This must exceed W2's 30-second write-concern timeout. The old
-            # 15-second socket timeout caused valid NP1/NP2 writes to be
+            # 15-second socket timeout previously caused valid majority writes to be
             # abandoned by the client before MongoDB finished waiting.
             socketTimeoutMS=W2_SOCKET_TIMEOUT_MS,
             retryWrites=False,
@@ -564,6 +604,7 @@ def summarize(scenario, results):
     attempted_operations = 3 * len(results)
     return {
         "id": scenario["id"],
+        "configuration": scenario["configuration"],
         "consistency": (passes / len(valid) * 100) if valid else None,
         "availability": (
             acknowledged_operations / attempted_operations * 100
@@ -580,26 +621,26 @@ def summarize(scenario, results):
 
 
 def print_summary(summaries):
-    print("\n" + "=" * 142)
+    print("\n" + "=" * 178)
     print("WRITES-FOLLOW-READS — NETWORK PARTITION SUMMARY")
-    print("=" * 142)
+    print("=" * 178)
     print(
-        f"{'Case':<5} | {'WFR Pass':<9} | {'Available':<10} | "
+        f"{'Case':<5} | {'Configuration':<25} | {'WFR Pass':<9} | {'Available':<10} | "
         f"{'Violations':<10} | {'Valid':<5} | {'Avg W1':<11} | "
         f"{'Avg Read':<11} | {'Avg W2':<11} | {'Election':<12} | "
         f"{'Verify':<11}"
     )
-    print("-" * 142)
+    print("-" * 178)
     for item in summaries:
         consistency = "N/A" if item["consistency"] is None else f"{item['consistency']:.1f}%"
         print(
-            f"{item['id']:<5} | {consistency:>9} | "
+            f"{item['id']:<5} | {item['configuration']:<25} | {consistency:>9} | "
             f"{item['availability']:>8.1f}% | {item['violations']:>10} | "
             f"{item['valid']:>5} | {item['avg_w1']:>7.2f} ms | "
             f"{item['avg_read']:>7.2f} ms | {item['avg_w2']:>7.2f} ms | "
             f"{item['avg_election']:>8.2f} ms | {item['avg_verify']:>7.2f} ms"
         )
-    print("=" * 142)
+    print("=" * 178)
 
 
 def main():

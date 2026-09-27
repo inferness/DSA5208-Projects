@@ -16,11 +16,12 @@ URI = (
 )
 DB_NAME = "wfr_failure_test_db"
 COLL_NAME = "events"
-NUM_ITERATIONS = 5
+NUM_ITERATIONS = 20
 COORD_DIR = Path("/app/wfr_failure_coord")
 SIGNAL_TIMEOUT_SECONDS = 240
 FAILOVER_TIMEOUT_SECONDS = 90
 RECOVERY_TIMEOUT_SECONDS = 120
+READ_VISIBILITY_TIMEOUT_SECONDS = 10
 
 
 SCENARIOS = [
@@ -32,12 +33,18 @@ SCENARIOS = [
     },
     {
         "id": "PF2",
+        "name": "R=majority, W=1",
+        "read_concern": ReadConcern("majority"),
+        "write_concern": WriteConcern(w=1),
+    },
+    {
+        "id": "PF3",
         "name": "R=local, W=majority",
         "read_concern": ReadConcern("local"),
         "write_concern": WriteConcern(w="majority", wtimeout=10000),
     },
     {
-        "id": "PF3",
+        "id": "PF4",
         "name": "R=local, W=1",
         "read_concern": ReadConcern("local"),
         "write_concern": WriteConcern(w=1),
@@ -153,6 +160,26 @@ def timed(operation):
         ) * 1000
 
 
+def read_until_visible(collection, document_id, session):
+    """Retry the configured read until W1 is visible or the deadline expires."""
+    started = time.perf_counter()
+    deadline = time.monotonic() + READ_VISIBILITY_TIMEOUT_SECONDS
+    last_error = None
+
+    while time.monotonic() < deadline:
+        try:
+            document = collection.find_one(
+                {"_id": document_id}, session=session, max_time_ms=2000
+            )
+            if document is not None:
+                return document, None, (time.perf_counter() - started) * 1000
+        except PyMongoError as error:
+            last_error = f"{type(error).__name__}: {error}"
+        time.sleep(0.1)
+
+    return None, last_error, (time.perf_counter() - started) * 1000
+
+
 def run_iteration(client, scenario, step, iteration_number):
     iteration_id = str(uuid.uuid4())
     old_primary = get_primary(client)
@@ -196,10 +223,10 @@ def run_iteration(client, scenario, step, iteration_number):
     # The same Client B session spans the read, primary failure, and W2.
     with client.start_session(causal_consistency=True) as client_b_session:
         if w1_acknowledged:
-            observed_w1, read_error, read_ms = timed(
-                lambda: read_collection.find_one(
-                    {"_id": w1_document["_id"]}, session=client_b_session
-                )
+            observed_w1, read_error, read_ms = read_until_visible(
+                read_collection,
+                w1_document["_id"],
+                client_b_session,
             )
         read_succeeded = observed_w1 is not None
         print(
@@ -324,6 +351,7 @@ def summarize(scenario, results):
     )
     return {
         "id": scenario["id"],
+        "configuration": scenario["name"],
         "consistency": passes / len(valid) * 100 if valid else None,
         "availability": successful_operations / (3 * len(results)) * 100,
         "violations": violations,
@@ -337,25 +365,25 @@ def summarize(scenario, results):
 
 
 def print_summary(summaries):
-    print("\n" + "=" * 142)
+    print("\n" + "=" * 178)
     print("WRITES-FOLLOW-READS — PRIMARY FAILURE SUMMARY")
-    print("=" * 142)
+    print("=" * 178)
     print(
-        f"{'Case':<5} | {'WFR Pass':<9} | {'Available':<10} | "
+        f"{'Case':<5} | {'Configuration':<25} | {'WFR Pass':<9} | {'Available':<10} | "
         f"{'Violations':<10} | {'Valid':<5} | {'Avg W1':<11} | "
         f"{'Avg Read':<11} | {'Avg W2':<11} | {'Election':<12} | {'Verify':<11}"
     )
-    print("-" * 142)
+    print("-" * 178)
     for item in summaries:
         consistency = "N/A" if item["consistency"] is None else f"{item['consistency']:.1f}%"
         print(
-            f"{item['id']:<5} | {consistency:>9} | {item['availability']:>8.1f}% | "
+            f"{item['id']:<5} | {item['configuration']:<25} | {consistency:>9} | {item['availability']:>8.1f}% | "
             f"{item['violations']:>10} | {item['valid']:>5} | "
             f"{item['avg_w1']:>7.2f} ms | {item['avg_read']:>7.2f} ms | "
             f"{item['avg_w2']:>7.2f} ms | {item['avg_election']:>8.2f} ms | "
             f"{item['avg_verify']:>7.2f} ms"
         )
-    print("=" * 142)
+    print("=" * 178)
 
 
 def main():

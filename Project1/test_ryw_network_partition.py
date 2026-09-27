@@ -19,40 +19,54 @@ MINORITY_NODES = ["mongo1:27017", "mongo2:27017"]
 MAJORITY_NODES = ["mongo3:27017", "mongo4:27017", "mongo5:27017"]
 SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("SERVER_SELECTION_TIMEOUT_MS", "30000"))
 WRITE_TIMEOUT_MS = int(os.getenv("WRITE_TIMEOUT_MS", "10000"))
+READ_TIMEOUT_MS = int(os.getenv("READ_TIMEOUT_MS", "5000"))  # 5s timeout to differentiate VIOLATION vs ERROR
+CAUSAL_CONSISTENCY = True
 HEAL_ON_EXIT = os.getenv("HEAL_ON_EXIT", "false").lower() == "true"
 
 
-class WriteTrackingListener(monitoring.CommandListener):
-    """Monitors write commands to track the exact server node that fulfilled each write."""
+class CommandTrackingListener(monitoring.CommandListener):
+    """Monitors write and read commands to track the exact server node that handled each command."""
     def __init__(self):
         self.last_write_node = "unknown"
+        self.last_read_node = "unknown"
 
-    def started(self, event):
-        pass
-
-    def succeeded(self, event):
-        if event.command_name in ("insert", "update", "delete"):
-            addr = getattr(event, "address", None)
-            conn = getattr(event, "connection_id", None)
-            if addr and isinstance(addr, (list, tuple)):
-                self.last_write_node = f"{addr[0]}:{addr[1]}"
-            elif conn and isinstance(conn, (list, tuple)):
-                self.last_write_node = f"{conn[0]}:{conn[1]}"
-            elif addr:
-                self.last_write_node = str(addr)
-            elif conn:
-                self.last_write_node = str(conn)
-
-    def failed(self, event):
+    def _extract_node(self, event):
         addr = getattr(event, "address", None)
         conn = getattr(event, "connection_id", None)
         if addr and isinstance(addr, (list, tuple)):
-            self.last_write_node = f"{addr[0]}:{addr[1]}"
+            return f"{addr[0]}:{addr[1]}"
         elif conn and isinstance(conn, (list, tuple)):
-            self.last_write_node = f"{conn[0]}:{conn[1]}"
+            return f"{conn[0]}:{conn[1]}"
+        elif addr:
+            return str(addr)
+        elif conn:
+            return str(conn)
+        return "unknown"
+
+    def started(self, event):
+        node = self._extract_node(event)
+        if event.command_name in ("insert", "update", "delete"):
+            self.last_write_node = node
+        elif event.command_name in ("find", "getMore"):
+            self.last_read_node = node
+
+    def succeeded(self, event):
+        node = self._extract_node(event)
+        if event.command_name in ("insert", "update", "delete"):
+            self.last_write_node = node
+        elif event.command_name in ("find", "getMore"):
+            self.last_read_node = node
+
+    def failed(self, event):
+        node = self._extract_node(event)
+        if event.command_name in ("insert", "update", "delete"):
+            self.last_write_node = node
+        elif event.command_name in ("find", "getMore"):
+            self.last_read_node = node
 
 
-WRITE_LISTENER = WriteTrackingListener()
+COMMAND_LISTENER = CommandTrackingListener()
+WRITE_LISTENER = COMMAND_LISTENER
 
 
 def verify_partition_topology():
@@ -113,23 +127,29 @@ def verify_partition_topology():
     return majority_primary
 
 
-def execute_read_with_node(coll, query, session, read_pref):
+def execute_read_with_node(coll, query, session, read_pref, max_time_ms=READ_TIMEOUT_MS):
     """
     Executes a read query with the given ReadPreference and captures
     the document returned and the exact server node (host:port) that served it.
+    Uses max_time_ms (default: 5000ms) to prevent infinite blocking under Causal Consistency.
     """
     read_coll = coll.with_options(read_preference=read_pref)
     t_start = time.perf_counter()
+    COMMAND_LISTENER.last_read_node = "unknown"
     serving_node = "unknown"
     doc = None
     outcome = "ERROR"
     err_detail = None
+    cursor = None
 
     try:
-        cursor = read_coll.find(query, session=session).limit(1)
+        cursor = read_coll.find(query, session=session).max_time_ms(max_time_ms).limit(1)
         doc = next(cursor, None)
         if cursor.address:
             serving_node = f"{cursor.address[0]}:{cursor.address[1]}"
+        elif COMMAND_LISTENER.last_read_node != "unknown":
+            serving_node = COMMAND_LISTENER.last_read_node
+
         if doc is not None and doc.get("_id") == query["_id"]:
             outcome = "PASS"
         else:
@@ -137,6 +157,11 @@ def execute_read_with_node(coll, query, session, read_pref):
     except Exception as e:
         outcome = "ERROR"
         err_detail = type(e).__name__
+        if cursor and getattr(cursor, "address", None):
+            serving_node = f"{cursor.address[0]}:{cursor.address[1]}"
+        elif COMMAND_LISTENER.last_read_node != "unknown":
+            serving_node = COMMAND_LISTENER.last_read_node
+
     t_end = time.perf_counter()
     latency_ms = (t_end - t_start) * 1000
 
@@ -152,7 +177,7 @@ def execute_read_with_node(coll, query, session, read_pref):
 def run_trial(cluster_client, write_concern, read_concern, iter_num, total_iters):
     """
     Executes one trial within the established steady-state partition:
-      1. Write unique document via replica set client.
+      1. Write unique document via replica set client in a causal session.
       2. Record write latency, status, and write serving node.
       3. Immediately read PRIMARY and record serving node.
       4. Immediately read SECONDARY and record serving node.
@@ -167,34 +192,33 @@ def run_trial(cluster_client, write_concern, read_concern, iter_num, total_iters
     }
 
     coll_write = db.get_collection(COLL_NAME, write_concern=write_concern)
-    WRITE_LISTENER.last_write_node = "unknown"
+    COMMAND_LISTENER.last_write_node = "unknown"
 
-    # 1. WRITE
-    t_write_start = time.perf_counter()
-    write_err = None
-    write_acknowledged = False
-    try:
-        with cluster_client.start_session(causal_consistency=False) as session:
+    with cluster_client.start_session(causal_consistency=CAUSAL_CONSISTENCY) as session:
+        # 1. WRITE
+        t_write_start = time.perf_counter()
+        write_err = None
+        write_acknowledged = False
+        try:
             coll_write.insert_one(payload, session=session)
             write_acknowledged = True
-    except Exception as e:
-        write_err = type(e).__name__
-        write_acknowledged = False
-    t_write_end = time.perf_counter()
-    write_ms = (t_write_end - t_write_start) * 1000
+        except Exception as e:
+            write_err = type(e).__name__
+            write_acknowledged = False
+        t_write_end = time.perf_counter()
+        write_ms = (t_write_end - t_write_start) * 1000
 
-    write_node = WRITE_LISTENER.last_write_node
-    if write_node == "unknown" and cluster_client.primary:
-        write_node = f"{cluster_client.primary[0]}:{cluster_client.primary[1]}"
+        write_node = COMMAND_LISTENER.last_write_node
+        if write_node == "unknown" and cluster_client.primary:
+            write_node = f"{cluster_client.primary[0]}:{cluster_client.primary[1]}"
 
-    # Initialize read results
-    pri_res = {"outcome": "SKIPPED", "latency_ms": 0.0, "serving_node": "N/A", "err_detail": None}
-    sec_res = {"outcome": "SKIPPED", "latency_ms": 0.0, "serving_node": "N/A", "err_detail": None}
+        # Initialize read results
+        pri_res = {"outcome": "SKIPPED", "latency_ms": 0.0, "serving_node": "N/A", "err_detail": None}
+        sec_res = {"outcome": "SKIPPED", "latency_ms": 0.0, "serving_node": "N/A", "err_detail": None}
 
-    # 2 & 3. READ PRIMARY & SECONDARY (if write acknowledged)
-    if write_acknowledged:
-        coll_read = db.get_collection(COLL_NAME, read_concern=read_concern)
-        with cluster_client.start_session(causal_consistency=False) as session:
+        # 2 & 3. READ PRIMARY & SECONDARY (if write acknowledged)
+        if write_acknowledged:
+            coll_read = db.get_collection(COLL_NAME, read_concern=read_concern)
             # Primary read
             pri_res = execute_read_with_node(coll_read, {"_id": doc_id}, session, ReadPreference.PRIMARY)
             # Secondary read
@@ -292,6 +316,7 @@ def main():
     print("=" * 95)
     print("  MongoDB Read-Your-Writes (RYW) Under Established Network Partition Test")
     print("  Environment: 2-3 Partition Active (Minority [mongo1, mongo2] | Majority [mongo3, mongo4, mongo5])")
+    print(f"  Causal Consistency: {CAUSAL_CONSISTENCY} | Read Timeout: {READ_TIMEOUT_MS}ms")
     print("=" * 95)
 
     # 1. Verify Topology
@@ -321,7 +346,7 @@ def main():
 
         # Final comparison table
         print("\n" + "=" * 105)
-        print("                 OVERALL RYW ESTABLISHED NETWORK PARTITION SUMMARY TABLE")
+        print(f"       OVERALL RYW ESTABLISHED NETWORK PARTITION SUMMARY TABLE (CC: {CAUSAL_CONSISTENCY})")
         print("=" * 105)
         print(f"{'Scenario':<25} | {'Write Status':<15} | {'Write Lat':<10} | {'Primary Read':<22} | {'Secondary Read':<22}")
         print("-" * 105)
@@ -342,7 +367,7 @@ def main():
 
             print(f"{s['scenario']:<25} | {w_stat:<15} | {w_lat:<10} | {pri_str:<22} | {sec_str:<22}")
         print("=" * 105)
-        print("\nLegend: P=PASS (Read Your Write observed), V=VIOLATION (Write missing), E=ERROR (Read exception)")
+        print(f"\nLegend: P=PASS (RYW observed), V=VIOLATION (Stale read / missing doc), E=ERROR (Timeout >{READ_TIMEOUT_MS}ms / read failure)")
 
     finally:
         try:
