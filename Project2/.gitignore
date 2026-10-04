@@ -1,0 +1,15 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+
+# Data downloads
+downloads/
+Dataset/
