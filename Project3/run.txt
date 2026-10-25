@@ -1,0 +1,82 @@
+========================================
+Compilation and Execution Commands
+========================================
+
+1. Serial Version (heat_serial.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 heat_serial.cpp -o heat_serial
+  (or: clang++ -O3 heat_serial.cpp -o heat_serial)
+
+Run:
+  ./heat_serial
+
+
+2. MPI Version 1 - Blocking Sendrecv (heat_mpi.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi.cpp -o heat_mpi
+
+Run (replace 4 with your desired number of MPI processes):
+  mpirun -np 4 ./heat_mpi
+
+
+3. MPI Version 2 - Non-blocking with Overlap (heat_mpi_v2.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2
+
+Run (replace 4 with your desired number of MPI processes):
+  mpirun -np 4 ./heat_mpi_v2
+
+
+4. MPI Tiled Version - Cache Tiling (heat_mpi_tile.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile
+
+Run (replace 4 with your desired number of MPI processes):
+  mpirun -np 4 ./heat_mpi_tile
+
+
+5. MPI 2D Block Decomposition (heat_mpi_block.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block
+
+Run (replace 4 with your desired number of MPI processes):
+  mpirun -np 4 ./heat_mpi_block
+
+
+6. Hybrid MPI + OpenMP (heat_mpi_openMP.cpp)
+----------------------------------------
+Compile (using Homebrew libomp for Apple Clang):
+  mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP.cpp -o heat_mpi_openMP
+
+Run (example: 2 MPI processes, each running 4 OpenMP threads = 8 cores total):
+  OMP_NUM_THREADS=4 mpirun -np 2 ./heat_mpi_openMP
+
+
+========================================
+Quick One-Liners (Compile & Run)
+========================================
+
+# Serial:
+g++ -O3 heat_serial.cpp -o heat_serial && ./heat_serial
+
+# MPI v1 (1D Row):
+mpicxx -O3 heat_mpi.cpp -o heat_mpi && mpirun -np 4 ./heat_mpi
+
+# MPI v2 (Non-blocking):
+mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2 && mpirun -np 4 ./heat_mpi_v2
+
+# MPI Tiled:
+mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile && mpirun -np 4 ./heat_mpi_tile
+
+# MPI 2D Block:
+mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block && mpirun -np 4 ./heat_mpi_block
+
+# Hybrid MPI + OpenMP:
+mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP.cpp -o heat_mpi_openMP && OMP_NUM_THREADS=4 mpirun -np 1 ./heat_mpi_openMP
+
+
