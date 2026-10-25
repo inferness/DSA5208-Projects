@@ -1,0 +1,124 @@
+================================================================================
+Compilation and Execution Commands (Windows - MSYS2 UCRT64 + MS-MPI)
+================================================================================
+
+[Setup / PATH Note]
+Before running the commands below in PowerShell, make sure g++, mpicxx, and
+mpiexec are available in your PATH by running this once in your terminal session:
+
+  PowerShell:
+    $env:PATH = "C:\msys64\ucrt64\bin;C:\Program Files\Microsoft MPI\Bin;" + $env:PATH
+
+  Command Prompt (cmd.exe):
+    set PATH=C:\msys64\ucrt64\bin;C:\Program Files\Microsoft MPI\Bin;%PATH%
+
+(Tip: In MSYS2 UCRT64 shell or if already added to System PATH, no setup is needed)
+
+
+1. Serial Version (heat_serial.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 heat_serial.cpp -o heat_serial.exe
+
+Run:
+  PowerShell:   .\heat_serial.exe
+  CMD / Bash:   heat_serial.exe
+
+
+2. MPI Version 1 - Blocking Sendrecv (heat_mpi.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi.cpp -o heat_mpi.exe
+
+Run (replace 4 with your desired number of MPI processes):
+  PowerShell:   mpiexec -n 4 .\heat_mpi.exe
+  CMD / Bash:   mpiexec -n 4 heat_mpi.exe
+
+
+3. MPI Version 2 - Non-blocking with Overlap (heat_mpi_v2.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2.exe
+
+Run (replace 4 with your desired number of MPI processes):
+  PowerShell:   mpiexec -n 4 .\heat_mpi_v2.exe
+  CMD / Bash:   mpiexec -n 4 heat_mpi_v2.exe
+
+
+4. MPI Tiled Version - Cache Tiling (heat_mpi_tile.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile.exe
+
+Run (replace 4 with your desired number of MPI processes):
+  PowerShell:   mpiexec -n 4 .\heat_mpi_tile.exe
+  CMD / Bash:   mpiexec -n 4 heat_mpi_tile.exe
+
+
+5. MPI 2D Block Decomposition (heat_mpi_block.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block.exe
+
+Run (replace 4 with your desired number of MPI processes):
+  PowerShell:   mpiexec -n 4 .\heat_mpi_block.exe
+  CMD / Bash:   mpiexec -n 4 heat_mpi_block.exe
+
+
+6. Hybrid MPI + OpenMP (heat_mpi_openMP.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 -fopenmp heat_mpi_openMP.cpp -o heat_mpi_openMP.exe
+
+Run (example: 2 MPI processes, each running 4 OpenMP threads = 8 cores total):
+  PowerShell:
+    $env:OMP_NUM_THREADS = 4; mpiexec -n 2 .\heat_mpi_openMP.exe
+    (or using MS-MPI -env flag):
+    mpiexec -env OMP_NUM_THREADS 4 -n 2 .\heat_mpi_openMP.exe
+
+  CMD:
+    set OMP_NUM_THREADS=4 && mpiexec -n 2 heat_mpi_openMP.exe
+
+
+================================================================================
+Quick One-Liners (Compile & Run)
+================================================================================
+
+--- PowerShell 5.1 / 7 ---
+# Serial:
+g++ -O3 heat_serial.cpp -o heat_serial.exe; .\heat_serial.exe
+
+# MPI v1 (1D Row):
+mpicxx -O3 heat_mpi.cpp -o heat_mpi.exe; mpiexec -n 4 .\heat_mpi.exe
+
+# MPI v2 (Non-blocking):
+mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2.exe; mpiexec -n 4 .\heat_mpi_v2.exe
+
+# MPI Tiled:
+mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile.exe; mpiexec -n 4 .\heat_mpi_tile.exe
+
+# MPI 2D Block:
+mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block.exe; mpiexec -n 4 .\heat_mpi_block.exe
+
+# Hybrid MPI + OpenMP:
+mpicxx -O3 -fopenmp heat_mpi_openMP.cpp -o heat_mpi_openMP.exe; mpiexec -env OMP_NUM_THREADS 4 -n 2 .\heat_mpi_openMP.exe
+
+
+--- Command Prompt (CMD) / MSYS2 Bash ---
+# Serial:
+g++ -O3 heat_serial.cpp -o heat_serial.exe && heat_serial.exe
+
+# MPI v1 (1D Row):
+mpicxx -O3 heat_mpi.cpp -o heat_mpi.exe && mpiexec -n 4 heat_mpi.exe
+
+# MPI v2 (Non-blocking):
+mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2.exe && mpiexec -n 4 heat_mpi_v2.exe
+
+# MPI Tiled:
+mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile.exe && mpiexec -n 4 heat_mpi_tile.exe
+
+# MPI 2D Block:
+mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block.exe && mpiexec -n 4 heat_mpi_block.exe
+
+# Hybrid MPI + OpenMP:
+mpicxx -O3 -fopenmp heat_mpi_openMP.cpp -o heat_mpi_openMP.exe && mpiexec -env OMP_NUM_THREADS 4 -n 2 heat_mpi_openMP.exe

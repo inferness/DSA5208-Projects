@@ -1,0 +1,33 @@
+# Compiled executables
+*.exe
+*.out
+*.o
+*.obj
+
+# Debug symbols & intermediate files
+*.pdb
+*.ilk
+
+# Shared & static libraries
+*.dll
+*.dylib
+*.so
+*.a
+*.lib
+
+# Specific project compiled binaries (without extension on macOS/Linux)
+heat_serial
+heat_mpi
+heat_mpi_v2
+heat_mpi_tile
+heat_mpi_block
+heat_mpi_openMP
+test_validate
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp files
+*.log
