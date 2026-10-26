@@ -7,7 +7,7 @@
 using namespace std;
 
 int main() {
-  const int N = 10000;
+  const int N = 3000;
   const int STEPS = 1000;
   const double ALPHA = 0.05;
 

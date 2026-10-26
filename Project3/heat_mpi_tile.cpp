@@ -14,10 +14,10 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  const int N = 10000;
+  const int N = 3000;
   const int STEPS = 1000;
   const double ALPHA = 0.05;
-  const int TILE_SIZE = 64;
+  const int TILE_SIZE = 16;
 
   if (N < 3 || STEPS < 0 || size > N) {
     if (rank == 0) {

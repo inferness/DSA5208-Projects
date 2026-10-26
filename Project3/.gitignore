@@ -23,6 +23,12 @@ heat_mpi_tile
 heat_mpi_block
 heat_mpi_openMP
 test_validate
+NBody_serial
+NBody_serial_block
+NBody_openMP
+NBody_mpi
+NBody_mpi_openMP
+NBody_hybrid
 
 # OS metadata
 .DS_Store

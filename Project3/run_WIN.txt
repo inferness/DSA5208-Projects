@@ -122,3 +122,82 @@ mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block.exe && mpiexec -n 4 heat_mpi_blo
 
 # Hybrid MPI + OpenMP:
 mpicxx -O3 -fopenmp heat_mpi_openMP.cpp -o heat_mpi_openMP.exe && mpiexec -env OMP_NUM_THREADS 4 -n 2 heat_mpi_openMP.exe
+
+
+================================================================================
+N-Body Simulation Commands
+================================================================================
+
+1. Serial Version (NBody_serial.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 NBody_serial.cpp -o NBody_serial.exe
+
+Run (default: N=5000 bodies, STEPS=100):
+  PowerShell:   .\NBody_serial.exe
+  CMD / Bash:   NBody_serial.exe
+
+Custom parameters: ./NBody_serial.exe [N] [STEPS]
+  Example (2000 bodies, 50 steps):
+  .\NBody_serial.exe 2000 50
+
+
+1b. Serial Cache-Blocked / Tiled Version (NBody_serial_block.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 NBody_serial_block.cpp -o NBody_serial_block.exe
+
+Run (default: N=5000 bodies, STEPS=100, BLOCK_SIZE=256):
+  PowerShell:   .\NBody_serial_block.exe
+  CMD / Bash:   NBody_serial_block.exe
+
+Custom parameters: ./NBody_serial_block.exe [N] [STEPS] [BLOCK_SIZE]
+  Example (5000 bodies, 100 steps, block size 256):
+  .\NBody_serial_block.exe 5000 100 256
+
+
+2. MPI Version (NBody_mpi.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 NBody_mpi.cpp -o NBody_mpi.exe
+
+Run (default: N=5000 bodies, STEPS=100, replace 4 with number of processes):
+  PowerShell:   mpiexec -n 4 .\NBody_mpi.exe
+  CMD / Bash:   mpiexec -n 4 NBody_mpi.exe
+
+Custom parameters: mpiexec -n 4 .\NBody_mpi.exe [N] [STEPS]
+  Example (2000 bodies, 50 steps):
+  mpiexec -n 4 .\NBody_mpi.exe 2000 50
+
+
+3. OpenMP Version (NBody_openMP.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 -fopenmp NBody_openMP.cpp -o NBody_openMP.exe
+
+Run (uses all available CPU threads by default):
+  PowerShell:   .\NBody_openMP.exe
+  CMD / Bash:   NBody_openMP.exe
+
+Custom parameters: .\NBody_openMP.exe [N] [STEPS] [NUM_THREADS]
+  Example (5000 bodies, 100 steps, 4 threads):
+  PowerShell:   .\NBody_openMP.exe 5000 100 4
+  (or via env): $env:OMP_NUM_THREADS = 4; .\NBody_openMP.exe
+
+
+4. Hybrid MPI + OpenMP Version (NBody_mpi_openMP.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 -fopenmp NBody_mpi_openMP.cpp -o NBody_mpi_openMP.exe
+
+Run (example: 2 MPI processes, each with 4 OpenMP threads = 8 workers total):
+  PowerShell:
+    mpiexec -env OMP_NUM_THREADS 4 -n 2 .\NBody_mpi_openMP.exe
+    (or set env var):
+    $env:OMP_NUM_THREADS = 4; mpiexec -n 2 .\NBody_mpi_openMP.exe
+
+  CMD / Bash:
+    set OMP_NUM_THREADS=4 && mpiexec -n 2 NBody_mpi_openMP.exe
+
+
+
