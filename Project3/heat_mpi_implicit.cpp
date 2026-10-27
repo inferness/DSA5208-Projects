@@ -1,0 +1,191 @@
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <mpi.h>
+#include <vector>
+
+using namespace std;
+
+// Convert local row (with halos) and global col to 1D flat index
+inline size_t idx(size_t i, size_t j, size_t n) {
+  return i * n + j;
+}
+
+int main(int argc, char *argv[]) {
+  MPI_Init(&argc, &argv);
+
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  // Default parameters matching heat_serial_implicit.cpp
+  int N = 3000;
+  int STEPS = 1000;
+  double ALPHA = 0.05;
+
+  // Jacobi iteration parameters for the implicit linear solve
+  int MAX_JACOBI_ITERS = 25; // Maximum inner solver iterations per time step
+  double TOL = 1e-5;         // Convergence tolerance for Jacobi solver
+
+  // Optional command-line arguments:
+  // mpirun -np <p> ./heat_mpi_implicit [N] [STEPS] [ALPHA] [MAX_JACOBI_ITERS] [TOL]
+  if (argc >= 2) N = atoi(argv[1]);
+  if (argc >= 3) STEPS = atoi(argv[2]);
+  if (argc >= 4) ALPHA = atof(argv[3]);
+  if (argc >= 5) MAX_JACOBI_ITERS = atoi(argv[4]);
+  if (argc >= 6) TOL = atof(argv[5]);
+
+  if (N < 3 || STEPS < 0 || ALPHA <= 0.0 || size > N) {
+    if (rank == 0) {
+      cerr << "Error: Invalid arguments. N >= 3, STEPS >= 0, ALPHA > 0, processes <= N.\n";
+    }
+    MPI_Finalize();
+    return 1;
+  }
+
+  // Divide rows among MPI processes (1D row decomposition)
+  int base = N / size;
+  int remainder = N % size;
+
+  int localRows = base + (rank < remainder ? 1 : 0);
+  int startRow = rank * base + min(rank, remainder);
+
+  const double diag = 1.0 + 4.0 * ALPHA;
+  const double invDiag = 1.0 / diag;
+
+  // Each rank allocates (localRows + 2) rows to include top and bottom halo rows
+  // u_prev: temperature at time step n (RHS of the linear system)
+  // u_curr: current estimate u^(k) in Jacobi iteration (exchanged via halos)
+  // u_next: updated estimate u^(k+1) in Jacobi iteration
+  vector<double> u_prev((localRows + 2) * N, 0.0);
+  vector<double> u_curr((localRows + 2) * N, 0.0);
+  vector<double> u_next((localRows + 2) * N, 0.0);
+
+  // Initial condition: hot cell at the center
+  int center = N / 2;
+  if (center >= startRow && center < startRow + localRows) {
+    int localCenter = center - startRow + 1;
+    u_prev[idx(localCenter, center, N)] = 100.0;
+    u_curr[idx(localCenter, center, N)] = 100.0;
+    u_next[idx(localCenter, center, N)] = 100.0;
+  }
+
+  int up = (rank == 0) ? MPI_PROC_NULL : rank - 1;
+  int down = (rank == size - 1) ? MPI_PROC_NULL : rank + 1;
+
+  if (rank == 0) {
+    cout << "========================================================\n";
+    cout << "     2D Heat Equation - Implicit Time Stepping (MPI)    \n";
+    cout << "     Method: Backward Euler with Jacobi Iterative Solver\n";
+    cout << "========================================================\n";
+    cout << "Grid size (N x N)    : " << N << " x " << N << "\n";
+    cout << "Time steps           : " << STEPS << "\n";
+    cout << "Alpha (diffusion)    : " << ALPHA << "\n";
+    cout << "Max Jacobi Iters/Step: " << MAX_JACOBI_ITERS << "\n";
+    cout << "Convergence Tol      : " << TOL << "\n";
+    cout << "MPI processes        : " << size << "\n";
+    cout << "Running simulation...\n";
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double start = MPI_Wtime();
+
+  long long totalJacobiIters = 0;
+
+  for (int t = 0; t < STEPS; t++) {
+    // Initial guess for u^{n+1} is the solution from time step n (u_curr)
+
+    int iter = 0;
+    for (; iter < MAX_JACOBI_ITERS; iter++) {
+
+      // Halo exchange for u_curr:
+      // 1. Send first owned row upward; receive lower neighbor into bottom halo
+      MPI_Sendrecv(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0,
+                   &u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0,
+                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+      // 2. Send last owned row downward; receive upper neighbor into top halo
+      MPI_Sendrecv(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1,
+                   &u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1,
+                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+      double localMaxDiff = 0.0;
+
+      // Update owned interior cells using Jacobi relaxation
+      for (int i = 1; i <= localRows; i++) {
+        int globalRow = startRow + i - 1;
+
+        // Keep physical top and bottom boundaries fixed at 0.0
+        if (globalRow == 0 || globalRow == N - 1)
+          continue;
+
+        const size_t rowOffset = i * N;
+        const size_t upOffset = (i - 1) * N;
+        const size_t downOffset = (i + 1) * N;
+
+        for (int j = 1; j < N - 1; j++) {
+          double neighborsSum = u_curr[upOffset + j] +
+                                u_curr[downOffset + j] +
+                                u_curr[rowOffset + j - 1] +
+                                u_curr[rowOffset + j + 1];
+
+          double newVal = (u_prev[rowOffset + j] + ALPHA * neighborsSum) * invDiag;
+          u_next[rowOffset + j] = newVal;
+
+          double diff = std::abs(newVal - u_curr[rowOffset + j]);
+          if (diff > localMaxDiff) {
+            localMaxDiff = diff;
+          }
+        }
+      }
+
+      // Prepare for next Jacobi iteration
+      u_curr.swap(u_next);
+
+      // Check global convergence across all MPI processes
+      double globalMaxDiff = 0.0;
+      MPI_Allreduce(&localMaxDiff, &globalMaxDiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+      if (globalMaxDiff < TOL) {
+        iter++;
+        break;
+      }
+    }
+
+    totalJacobiIters += iter;
+
+    // Time step completed: advance u_prev to the newly converged solution u^{n+1}
+    u_prev = u_curr;
+  }
+
+  double localTime = MPI_Wtime() - start;
+  double maxTime = 0.0;
+  MPI_Reduce(&localTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  // Find center temperature for reporting
+  double centerTemp = 0.0;
+  if (center >= startRow && center < startRow + localRows) {
+    centerTemp = u_prev[idx(center - startRow + 1, center, N)];
+  }
+  double globalCenterTemp = 0.0;
+  MPI_Reduce(&centerTemp, &globalCenterTemp, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  if (rank == 0) {
+    cout << fixed << setprecision(6);
+    cout << "========================================================\n";
+    cout << "Execution time       : " << maxTime << " seconds\n";
+    if (STEPS > 0) {
+      cout << "Time per time step   : " << (maxTime / STEPS) * 1000.0 << " ms\n";
+      cout << "Avg Jacobi iters/step: " << (double)totalJacobiIters / STEPS << "\n";
+    }
+    cout << "Total Jacobi iters   : " << totalJacobiIters << "\n";
+    cout << "Center temperature   : " << globalCenterTemp << "\n";
+    cout << "MPI processes        : " << size << "\n";
+    cout << "========================================================\n";
+  }
+
+  MPI_Finalize();
+  return 0;
+}

@@ -68,12 +68,28 @@ Run (example: 2 MPI processes, each running 4 OpenMP threads = 8 cores total):
   OMP_NUM_THREADS=4 mpirun -np 2 ./heat_mpi_openMP
 
 
+7. MPI Version - Implicit Jacobi (heat_mpi_implicit.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit
+
+Run (replace 4 with your desired number of MPI processes):
+  mpirun -np 4 ./heat_mpi_implicit
+
+Custom parameters: mpirun -np <p> ./heat_mpi_implicit [N] [STEPS] [ALPHA] [MAX_JACOBI_ITERS] [TOL]
+  Example (N=500, STEPS=100):
+  mpirun -np 4 ./heat_mpi_implicit 500 100
+
+
 ========================================
 Quick One-Liners (Compile & Run)
 ========================================
 
-# Serial:
+# Serial Explicit:
 g++ -O3 heat_serial.cpp -o heat_serial && ./heat_serial
+
+# Serial Implicit:
+g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit && ./heat_serial_implicit
 
 # MPI v1 (1D Row):
 mpicxx -O3 heat_mpi.cpp -o heat_mpi && mpirun -np 4 ./heat_mpi
@@ -89,5 +105,9 @@ mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block && mpirun -np 4 ./heat_mpi_block
 
 # Hybrid MPI + OpenMP:
 mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP.cpp -o heat_mpi_openMP && OMP_NUM_THREADS=4 mpirun -np 1 ./heat_mpi_openMP
+
+# MPI Implicit:
+mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit && mpirun -np 4 ./heat_mpi_implicit
+
 
 
