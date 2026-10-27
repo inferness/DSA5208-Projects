@@ -22,6 +22,11 @@ heat_mpi_v2
 heat_mpi_tile
 heat_mpi_block
 heat_mpi_openMP
+heat_serial_implicit
+heat_mpi_implicit
+heat_mpi_block_implicit
+heat_mpi_openMP_implicit
+*_implicit
 test_validate
 NBody_serial
 NBody_serial_block

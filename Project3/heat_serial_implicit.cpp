@@ -16,48 +16,57 @@ int main(int argc, char* argv[]) {
   // Default parameters matching heat_serial.cpp
   int N = 3000;
   int STEPS = 1000;
-  double ALPHA = 0.05;
+  // Discretization parameters:
+  // LAMBDA represents the dimensionless diffusion number (mesh Fourier number):
+  //   lambda = (kappa * dt) / (dx^2)
+  // where:
+  //   - kappa: thermal diffusivity
+  //   - dt   : physical time-step size
+  //   - dx   : spatial grid spacing
+  // In explicit methods, numerical stability requires lambda <= 0.25 in 2D.
+  // In implicit Backward Euler, the method is unconditionally stable for any lambda > 0.
+  double LAMBDA = 0.05;
 
   // Jacobi iteration parameters for the implicit linear solve
   int MAX_JACOBI_ITERS = 25;   // Maximum inner solver iterations per time step
   double TOL = 1e-5;           // Convergence tolerance for Jacobi solver
 
   // Optional command-line arguments:
-  // ./heat_serial_implicit [N] [STEPS] [ALPHA] [MAX_JACOBI_ITERS] [TOL]
+  // ./heat_serial_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
   if (argc >= 2) N = atoi(argv[1]);
   if (argc >= 3) STEPS = atoi(argv[2]);
-  if (argc >= 4) ALPHA = atof(argv[3]);
+  if (argc >= 4) LAMBDA = atof(argv[3]);
   if (argc >= 5) MAX_JACOBI_ITERS = atoi(argv[4]);
   if (argc >= 6) TOL = atof(argv[5]);
 
-  if (N < 3 || STEPS < 0 || ALPHA <= 0.0) {
-    cerr << "Error: Invalid arguments. N >= 3, STEPS >= 0, ALPHA > 0.\n";
+  if (N < 3 || STEPS < 0 || LAMBDA <= 0.0) {
+    cerr << "Error: Invalid arguments. N >= 3, STEPS >= 0, LAMBDA > 0.\n";
     return 1;
   }
 
   /*
    * Implicit Time Stepping (Backward Euler):
    * ----------------------------------------------------
-   * Continuous: du/dt = alpha * laplacian(u)
+   * Continuous: du/dt = kappa * laplacian(u)
    *
-   * Discrete (Backward Euler at time n+1):
-   * u^{n+1}_{i,j} = u^n_{i,j} + alpha * (u^{n+1}_{i-1,j} + u^{n+1}_{i+1,j} +
-   *                                      u^{n+1}_{i,j-1} + u^{n+1}_{i,j+1} -
-   *                                      4 * u^{n+1}_{i,j})
+   * Discrete (Backward Euler at time step n+1 with lambda = kappa*dt / dx^2):
+   * u^{n+1}_{i,j} = u^n_{i,j} + lambda * (u^{n+1}_{i-1,j} + u^{n+1}_{i+1,j} +
+   *                                       u^{n+1}_{i,j-1} + u^{n+1}_{i,j+1} -
+   *                                       4 * u^{n+1}_{i,j})
    *
    * Rearranging into linear system A * u^{n+1} = u^n:
-   * (1 + 4*alpha) * u^{n+1}_{i,j} - alpha * (u^{n+1}_{i-1,j} + u^{n+1}_{i+1,j} +
-   *                                         u^{n+1}_{i,j-1} + u^{n+1}_{i,j+1}) = u^n_{i,j}
+   * (1 + 4*lambda) * u^{n+1}_{i,j} - lambda * (u^{n+1}_{i-1,j} + u^{n+1}_{i+1,j} +
+   *                                          u^{n+1}_{i,j-1} + u^{n+1}_{i,j+1}) = u^n_{i,j}
    *
-   * The Jacobian matrix J = dF/du^{n+1} has diagonal D = (1 + 4*alpha)
-   * and off-diagonals -alpha for adjacent cells.
+   * The system matrix A has diagonal D = (1 + 4*lambda)
+   * and off-diagonals -lambda for adjacent orthogonal cells.
    *
    * Jacobi Iteration formula to solve this system at each time step:
-   * u^{(k+1)}_{i,j} = [ u^n_{i,j} + alpha * (u^{(k)}_{i-1,j} + u^{(k)}_{i+1,j} +
-   *                                          u^{(k)}_{i,j-1} + u^{(k)}_{i,j+1}) ] / (1 + 4*alpha)
+   * u^{(k+1)}_{i,j} = [ u^n_{i,j} + lambda * (u^{(k)}_{i-1,j} + u^{(k)}_{i+1,j} +
+   *                                           u^{(k)}_{i,j-1} + u^{(k)}_{i,j+1}) ] / (1 + 4*lambda)
    */
 
-  const double diag = 1.0 + 4.0 * ALPHA;
+  const double diag = 1.0 + 4.0 * LAMBDA;
   const double invDiag = 1.0 / diag;
 
   // Flat 1D vectors for cache efficiency
@@ -79,7 +88,7 @@ int main(int argc, char* argv[]) {
   cout << "========================================================\n";
   cout << "Grid size (N x N)    : " << N << " x " << N << "\n";
   cout << "Time steps           : " << STEPS << "\n";
-  cout << "Alpha (diffusion)    : " << ALPHA << "\n";
+  cout << "Lambda (diffusion)   : " << LAMBDA << "  [lambda = kappa*dt/dx^2]\n";
   cout << "Max Jacobi Iters/Step: " << MAX_JACOBI_ITERS << "\n";
   cout << "Convergence Tol      : " << TOL << "\n";
   cout << "Running simulation...\n";
@@ -87,12 +96,17 @@ int main(int argc, char* argv[]) {
   auto start = chrono::steady_clock::now();
 
   long long totalJacobiIters = 0;
+  int nonConvergedSteps = 0;
+  double maxResidualOverall = 0.0;
 
   for (int t = 0; t < STEPS; t++) {
     // Initial guess for the implicit solution u^{n+1} is the solution from time step n
     // (u_curr is already initialized to u_prev from the previous step)
 
+    bool converged = false;
+    double lastMaxDiff = 0.0;
     int iter = 0;
+
     for (; iter < MAX_JACOBI_ITERS; iter++) {
       double maxDiff = 0.0;
 
@@ -108,7 +122,7 @@ int main(int argc, char* argv[]) {
                                 u_curr[rowOffset + j - 1] +
                                 u_curr[rowOffset + j + 1];
 
-          double newVal = (u_prev[rowOffset + j] + ALPHA * neighborsSum) * invDiag;
+          double newVal = (u_prev[rowOffset + j] + LAMBDA * neighborsSum) * invDiag;
           u_next[rowOffset + j] = newVal;
 
           double diff = std::abs(newVal - u_curr[rowOffset + j]);
@@ -120,15 +134,49 @@ int main(int argc, char* argv[]) {
 
       // Prepare for next Jacobi iteration
       u_curr.swap(u_next);
+      lastMaxDiff = maxDiff;
 
       // Check convergence of inner solver
       if (maxDiff < TOL) {
+        converged = true;
         iter++;
         break;
       }
     }
 
+    if (!converged) {
+      nonConvergedSteps++;
+      if (nonConvergedSteps <= 5) {
+        cerr << "Warning: Jacobi did not converge at time step " << t
+             << " (reached max " << MAX_JACOBI_ITERS
+             << " iters, last diff: " << lastMaxDiff << " >= TOL: " << TOL << ")\n";
+      } else if (nonConvergedSteps == 6) {
+        cerr << "Warning: Further convergence warnings suppressed...\n";
+      }
+    }
+
     totalJacobiIters += iter;
+
+    // Calculate maximum absolute residual r = b - A*u^{n+1} on the FINAL time step only
+    if (t == STEPS - 1) {
+      double stepMaxResidual = 0.0;
+      for (int i = 1; i < N - 1; i++) {
+        const size_t rowOffset = i * N;
+        const size_t upOffset = (i - 1) * N;
+        const size_t downOffset = (i + 1) * N;
+
+        for (int j = 1; j < N - 1; j++) {
+          double Au = diag * u_curr[rowOffset + j] -
+                      LAMBDA * (u_curr[upOffset + j] + u_curr[downOffset + j] +
+                                u_curr[rowOffset + j - 1] + u_curr[rowOffset + j + 1]);
+          double res = std::abs(u_prev[rowOffset + j] - Au);
+          if (res > stepMaxResidual) {
+            stepMaxResidual = res;
+          }
+        }
+      }
+      maxResidualOverall = stepMaxResidual;
+    }
 
     // Time step completed: advance u_prev to the newly converged solution u^{n+1}
     u_prev = u_curr;
@@ -136,6 +184,17 @@ int main(int argc, char* argv[]) {
 
   auto end = chrono::steady_clock::now();
   double elapsed = chrono::duration<double>(end - start).count();
+
+  // Compute final grid validation metrics (heat conservation & bounds)
+  double maxTemp = u_prev[0];
+  double minTemp = u_prev[0];
+  double totalHeat = 0.0;
+  for (size_t k = 0; k < (size_t)N * N; k++) {
+    double val = u_prev[k];
+    if (val > maxTemp) maxTemp = val;
+    if (val < minTemp) minTemp = val;
+    totalHeat += val;
+  }
 
   cout << fixed << setprecision(6);
   cout << "========================================================\n";
@@ -145,7 +204,28 @@ int main(int argc, char* argv[]) {
     cout << "Avg Jacobi iters/step: " << (double)totalJacobiIters / STEPS << "\n";
   }
   cout << "Total Jacobi iters   : " << totalJacobiIters << "\n";
-  cout << "Center temperature   : " << u_prev[idx(N / 2, N / 2, N)] << "\n";
+  cout << "Non-converged steps  : " << nonConvergedSteps << " / " << STEPS;
+  if (nonConvergedSteps == 0) {
+    cout << " (100% converged)\n";
+  } else {
+    cout << " (WARNING: " << fixed << setprecision(2)
+         << ((double)nonConvergedSteps / STEPS * 100.0) << "% failed to reach TOL)\n";
+    cout << fixed << setprecision(6);
+  }
+  cout << "Max absolute residual: " << scientific << maxResidualOverall << defaultfloat << "\n";
+  cout << fixed << setprecision(6);
+  cout << "--------------------------------------------------------\n";
+  cout << "Validation Metrics (Physics & Stability Check):\n";
+  cout << "  - Center Temperature  : " << u_prev[idx(N / 2, N / 2, N)] << "\n";
+  cout << "  - Maximum Temperature : " << maxTemp << "\n";
+  cout << "  - Minimum Temperature : " << minTemp;
+  if (minTemp < -1e-12) {
+    cout << " (WARNING: Negative temperature detected!)\n";
+  } else {
+    cout << " (Stable, >= 0)\n";
+  }
+  cout << "  - Total Heat Energy   : " << totalHeat
+       << " (Initial: 100.000000, Loss: " << (100.0 - totalHeat) << ")\n";
   cout << "========================================================\n";
 
   return 0;

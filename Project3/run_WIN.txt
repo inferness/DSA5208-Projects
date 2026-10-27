@@ -34,7 +34,7 @@ Run (default: N=3000, STEPS=1000):
   PowerShell:   .\heat_serial_implicit.exe
   CMD / Bash:   heat_serial_implicit.exe
 
-Custom parameters: ./heat_serial_implicit.exe [N] [STEPS] [ALPHA] [MAX_JACOBI_ITERS] [TOL]
+Custom parameters: ./heat_serial_implicit.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
   Example (N=500, STEPS=100):
   PowerShell:   .\heat_serial_implicit.exe 500 100
 
@@ -95,7 +95,7 @@ Run (example: 2 MPI processes, each running 4 OpenMP threads = 8 cores total):
     set OMP_NUM_THREADS=4 && mpiexec -n 2 heat_mpi_openMP.exe
 
 
-7. MPI Version - Implicit Jacobi (heat_mpi_implicit.cpp)
+7. MPI Version - Implicit Jacobi 1D Row (heat_mpi_implicit.cpp)
 ----------------------------------------
 Compile:
   mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit.exe
@@ -104,9 +104,40 @@ Run (replace 4 with your desired number of MPI processes):
   PowerShell:   mpiexec -n 4 .\heat_mpi_implicit.exe
   CMD / Bash:   mpiexec -n 4 heat_mpi_implicit.exe
 
-Custom parameters: mpiexec -n 4 .\heat_mpi_implicit.exe [N] [STEPS] [ALPHA] [MAX_JACOBI_ITERS] [TOL]
+Custom parameters: mpiexec -n 4 .\heat_mpi_implicit.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
   Example (N=500, STEPS=100):
   PowerShell:   mpiexec -n 4 .\heat_mpi_implicit.exe 500 100
+
+
+8. MPI Version - Implicit Jacobi 2D Block (heat_mpi_block_implicit.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 heat_mpi_block_implicit.cpp -o heat_mpi_block_implicit.exe
+
+Run (replace 4 with your desired number of MPI processes):
+  PowerShell:   mpiexec -n 4 .\heat_mpi_block_implicit.exe
+  CMD / Bash:   mpiexec -n 4 heat_mpi_block_implicit.exe
+
+Custom parameters: mpiexec -n 4 .\heat_mpi_block_implicit.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
+  Example (N=500, STEPS=100):
+  PowerShell:   mpiexec -n 4 .\heat_mpi_block_implicit.exe 500 100
+
+
+9. Hybrid MPI + OpenMP - Implicit Jacobi (heat_mpi_openMP_implicit.cpp)
+----------------------------------------
+Compile:
+  mpicxx -O3 -fopenmp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit.exe
+
+Run (example: 2 MPI processes, each running 2 OpenMP threads = 4 cores total):
+  PowerShell:
+    $env:OMP_NUM_THREADS = 2; mpiexec -n 2 .\heat_mpi_openMP_implicit.exe
+    (or using MS-MPI -env flag):
+    mpiexec -env OMP_NUM_THREADS 2 -n 2 .\heat_mpi_openMP_implicit.exe
+
+  CMD:
+    set OMP_NUM_THREADS=2 && mpiexec -n 2 heat_mpi_openMP_implicit.exe
+
+Custom parameters: mpiexec -env OMP_NUM_THREADS <t> -n <p> .\heat_mpi_openMP_implicit.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
 
 
 ================================================================================
@@ -132,11 +163,17 @@ mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile.exe; mpiexec -n 4 .\heat_mpi_tile.
 # MPI 2D Block:
 mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block.exe; mpiexec -n 4 .\heat_mpi_block.exe
 
-# Hybrid MPI + OpenMP:
+# Hybrid MPI + OpenMP (Explicit):
 mpicxx -O3 -fopenmp heat_mpi_openMP.cpp -o heat_mpi_openMP.exe; mpiexec -env OMP_NUM_THREADS 4 -n 2 .\heat_mpi_openMP.exe
 
-# MPI Implicit:
+# MPI Implicit (1D Row):
 mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit.exe; mpiexec -n 4 .\heat_mpi_implicit.exe
+
+# MPI Implicit (2D Block):
+mpicxx -O3 heat_mpi_block_implicit.cpp -o heat_mpi_block_implicit.exe; mpiexec -n 4 .\heat_mpi_block_implicit.exe
+
+# Hybrid MPI + OpenMP (Implicit):
+mpicxx -O3 -fopenmp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit.exe; mpiexec -env OMP_NUM_THREADS 2 -n 2 .\heat_mpi_openMP_implicit.exe
 
 
 --- Command Prompt (CMD) / MSYS2 Bash ---
