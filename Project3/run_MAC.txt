@@ -2,7 +2,7 @@
 Compilation and Execution Commands
 ========================================
 
-1. Serial Version (heat_serial.cpp)
+1. Serial Version - Explicit (heat_serial.cpp)
 ----------------------------------------
 Compile:
   g++ -O3 heat_serial.cpp -o heat_serial
@@ -10,6 +10,17 @@ Compile:
 
 Run:
   ./heat_serial
+
+
+1b. Serial Version - Implicit (heat_serial_implicit.cpp)
+----------------------------------------
+Compile:
+  g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit
+  (or: clang++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit)
+
+Run:
+  ./heat_serial_implicit
+
 
 
 2. MPI Version 1 - Blocking Sendrecv (heat_mpi.cpp)
