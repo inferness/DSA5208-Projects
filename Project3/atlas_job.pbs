@@ -1,0 +1,47 @@
+#!/bin/bash
+# ==============================================================================
+# PBS Pro Batch Job Script for NUS Atlas HPC Cluster
+# ==============================================================================
+# Job Name:
+#PBS -N heat_benchmark
+#
+# Request 1 compute node with 16 CPUs and 16 MPI process slots:
+#PBS -l select=1:ncpus=16:mpiprocs=16
+#
+# Request maximum wallclock run time (e.g., 1 hour):
+#PBS -l walltime=01:00:00
+#
+# Join standard output and standard error into a single log file:
+#PBS -j oe
+#PBS -o results/pbs_job.log
+
+# Change to the directory from which the job was submitted:
+cd "$PBS_O_WORKDIR"
+
+# Load required modules:
+module load openmpi/4.1.2
+
+echo "=========================================================="
+echo "Job started on: $(hostname) at $(date)"
+echo "Working directory: $(pwd)"
+echo "=========================================================="
+
+# 1. Run Serial Baseline first (5 repetitions):
+./run_benchmark.sh heat_serial_implicit.cpp 1 1 5 1000 1000
+
+# 2. Run MPI 1D Implicit across process counts:
+for p in 1 2 4 8 16; do
+  ./run_benchmark.sh heat_mpi_implicit.cpp "$p" 1 5 1000 1000
+done
+
+# 3. Run MPI 2D Block Implicit across process counts:
+if [ -f "heat_mpi_block_implicit.cpp" ]; then
+  for p in 1 2 4 8 16; do
+    ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 5 1000 1000
+  done
+fi
+
+echo "=========================================================="
+echo "Job finished at $(date)"
+echo "=========================================================="
+

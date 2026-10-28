@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -364,6 +366,76 @@ int main(int argc, char *argv[]) {
     cout << "MPI processes        : " << size
          << " (2D Process Grid: " << dims[0] << " x " << dims[1] << ")\n";
     cout << "========================================================\n";
+  }
+
+  // Automatic verification against serial baseline if baseline file exists
+  int baselineExists = 0;
+  string baselineBin = "results/baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin";
+  if (rank == 0) {
+    ifstream testFile(baselineBin, ios::binary);
+    if (testFile.good()) {
+      baselineExists = 1;
+    }
+  }
+  MPI_Bcast(&baselineExists, 1, MPI_INT, 0, cart_comm);
+
+  if (baselineExists) {
+    vector<double> ownedBlock(localRows * localCols);
+    for (int i = 0; i < localRows; i++) {
+      for (int j = 0; j < localCols; j++) {
+        ownedBlock[i * localCols + j] = u_prev[idx(i + 1, j + 1)];
+      }
+    }
+
+    vector<double> fullGrid;
+    if (rank == 0) fullGrid.resize((size_t)N * N, 0.0);
+
+    if (rank == 0) {
+      for (int i = 0; i < localRows; i++) {
+        for (int j = 0; j < localCols; j++) {
+          fullGrid[(startRow + i) * N + (startCol + j)] = ownedBlock[i * localCols + j];
+        }
+      }
+      for (int r = 1; r < size; r++) {
+        int r_coords[2];
+        MPI_Cart_coords(cart_comm, r, 2, r_coords);
+        int r_rows = base_r + (r_coords[0] < rem_r ? 1 : 0);
+        int r_startR = r_coords[0] * base_r + min(r_coords[0], rem_r);
+        int r_cols = base_c + (r_coords[1] < rem_c ? 1 : 0);
+        int r_startC = r_coords[1] * base_c + min(r_coords[1], rem_c);
+
+        vector<double> r_buf(r_rows * r_cols);
+        MPI_Recv(r_buf.data(), r_rows * r_cols, MPI_DOUBLE, r, 100, cart_comm, MPI_STATUS_IGNORE);
+        for (int i = 0; i < r_rows; i++) {
+          for (int j = 0; j < r_cols; j++) {
+            fullGrid[(r_startR + i) * N + (r_startC + j)] = r_buf[i * r_cols + j];
+          }
+        }
+      }
+
+      vector<double> baselineGrid((size_t)N * N);
+      ifstream binIn(baselineBin, ios::binary);
+      binIn.read(reinterpret_cast<char*>(baselineGrid.data()), sizeof(double) * N * N);
+      binIn.close();
+
+      double maxDiff = 0.0;
+      for (size_t k = 0; k < (size_t)N * N; k++) {
+        double d = std::abs(fullGrid[k] - baselineGrid[k]);
+        if (d > maxDiff) maxDiff = d;
+      }
+
+      cout << "Baseline Solution Verification:\n";
+      cout << "  - Baseline File       : " << baselineBin << "\n";
+      cout << "  - Max Absolute Diff   : " << scientific << maxDiff << defaultfloat << "\n";
+      if (maxDiff < 1e-9) {
+        cout << "  - Verification Result : PASSED (Bit-for-bit identical to Serial Baseline)\n";
+      } else {
+        cout << "  - Verification Result : WARNING (Discrepancy detected!)\n";
+      }
+      cout << "========================================================\n";
+    } else {
+      MPI_Send(ownedBlock.data(), localRows * localCols, MPI_DOUBLE, 0, 100, cart_comm);
+    }
   }
 
   MPI_Type_free(&col_type);

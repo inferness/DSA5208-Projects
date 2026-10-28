@@ -234,5 +234,35 @@ clang++ -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/ho
 mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp NBody_mpi_openMP.cpp -o NBody_mpi_openMP && OMP_NUM_THREADS=4 mpirun -np 2 ./NBody_mpi_openMP
 
 
+================================================================================
+Automated Experiment & Benchmarking Helper (Atlas / HPC / Mac)
+================================================================================
+
+1. Run any single experiment K times with automatic mean calculation:
+   ./run_benchmark.sh <file.cpp> <mpi_procs> <omp_threads> [runs=5] [extra_args...]
+
+   Examples:
+     # Run MPI implicit with 4 processes, 5 times:
+     ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 5
+
+     # Run Serial implicit, 5 times:
+     ./run_benchmark.sh heat_serial_implicit.cpp 1 1 5
+
+     # Run Hybrid MPI+OpenMP (2 ranks x 4 threads), 5 times:
+     ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 2 4 5
+
+2. Run full scaling benchmark sweep across all process counts:
+   ./sweep_experiments.sh 1000 1000
+
+3. Submit as batch job on Atlas (SLURM):
+   sbatch atlas_job.slurm
+
+Outputs:
+  - Summary Text File : results/<experiment>_summary.txt
+  - Master CSV File   : results/all_results.csv (ready for Excel / Pandas plotting)
+  - Raw Output Logs   : results/logs/
+
+
+
 
 

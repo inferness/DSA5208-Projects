@@ -1,9 +1,17 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 using namespace std;
 
@@ -226,6 +234,48 @@ int main(int argc, char* argv[]) {
   }
   cout << "  - Total Heat Energy   : " << totalHeat
        << " (Initial: 100.000000, Loss: " << (100.0 - totalHeat) << ")\n";
+  cout << "--------------------------------------------------------\n";
+
+  // Automatically save baseline output files for verification
+#if defined(_WIN32)
+  _mkdir("results");
+#else
+  mkdir("results", 0777);
+#endif
+
+  string baselineBin = "results/baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin";
+  string baselineTxt = "results/baseline_implicit_metrics_N" + to_string(N) + "_S" + to_string(STEPS) + ".txt";
+
+  ofstream binFile(baselineBin, ios::binary);
+  if (binFile.is_open()) {
+    binFile.write(reinterpret_cast<const char*>(u_prev.data()), sizeof(double) * N * N);
+    binFile.close();
+    cout << "Saved baseline grid   : " << baselineBin << " ("
+         << fixed << setprecision(2) << (sizeof(double) * N * N) / (1024.0 * 1024.0) << " MB)\n";
+  } else {
+    cerr << "Warning: Could not open " << baselineBin << " to save baseline grid.\n";
+  }
+
+  ofstream txtFile(baselineTxt);
+  if (txtFile.is_open()) {
+    txtFile << fixed << setprecision(10);
+    txtFile << "N: " << N << "\n";
+    txtFile << "STEPS: " << STEPS << "\n";
+    txtFile << "LAMBDA: " << LAMBDA << "\n";
+    txtFile << "MAX_JACOBI_ITERS: " << MAX_JACOBI_ITERS << "\n";
+    txtFile << "TOL: " << scientific << TOL << fixed << "\n";
+    txtFile << "Center_Temperature: " << u_prev[idx(N / 2, N / 2, N)] << "\n";
+    txtFile << "Max_Temperature: " << maxTemp << "\n";
+    txtFile << "Min_Temperature: " << minTemp << "\n";
+    txtFile << "Total_Heat_Energy: " << totalHeat << "\n";
+    txtFile << "Total_Jacobi_Iters: " << totalJacobiIters << "\n";
+    txtFile << "Non_Converged_Steps: " << nonConvergedSteps << "\n";
+    txtFile << "Max_Absolute_Residual: " << scientific << maxResidualOverall << fixed << "\n";
+    txtFile << "Execution_Time_Seconds: " << elapsed << "\n";
+    txtFile.close();
+    cout << "Saved baseline metrics: " << baselineTxt << "\n";
+  }
+
   cout << "========================================================\n";
 
   return 0;

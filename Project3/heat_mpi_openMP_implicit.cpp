@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
 #include <omp.h>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -313,6 +315,62 @@ int main(int argc, char *argv[]) {
     cout << "OpenMP threads/proc  : " << numThreads << "\n";
     cout << "Total worker threads : " << size * numThreads << "\n";
     cout << "========================================================\n";
+  }
+
+  // Automatic verification against serial baseline if baseline file exists
+  int baselineExists = 0;
+  string baselineBin = "results/baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin";
+  if (rank == 0) {
+    ifstream testFile(baselineBin, ios::binary);
+    if (testFile.good()) {
+      baselineExists = 1;
+    }
+  }
+  MPI_Bcast(&baselineExists, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (baselineExists) {
+    vector<double> localOwned(localRows * N);
+    for (int i = 1; i <= localRows; i++) {
+      for (int j = 0; j < N; j++) {
+        localOwned[(i - 1) * N + j] = u_prev[idx(i, j, N)];
+      }
+    }
+
+    vector<int> recvcounts(size), displs(size);
+    for (int r = 0; r < size; r++) {
+      int r_rows = base + (r < remainder ? 1 : 0);
+      recvcounts[r] = r_rows * N;
+      displs[r] = (r * base + min(r, remainder)) * N;
+    }
+
+    vector<double> fullGrid;
+    if (rank == 0) fullGrid.resize((size_t)N * N);
+
+    MPI_Gatherv(localOwned.data(), localRows * N, MPI_DOUBLE,
+                fullGrid.data(), recvcounts.data(), displs.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+      vector<double> baselineGrid((size_t)N * N);
+      ifstream binIn(baselineBin, ios::binary);
+      binIn.read(reinterpret_cast<char*>(baselineGrid.data()), sizeof(double) * N * N);
+      binIn.close();
+
+      double maxDiff = 0.0;
+      for (size_t k = 0; k < (size_t)N * N; k++) {
+        double d = std::abs(fullGrid[k] - baselineGrid[k]);
+        if (d > maxDiff) maxDiff = d;
+      }
+
+      cout << "Baseline Solution Verification:\n";
+      cout << "  - Baseline File       : " << baselineBin << "\n";
+      cout << "  - Max Absolute Diff   : " << scientific << maxDiff << defaultfloat << "\n";
+      if (maxDiff < 1e-9) {
+        cout << "  - Verification Result : PASSED (Bit-for-bit identical to Serial Baseline)\n";
+      } else {
+        cout << "  - Verification Result : WARNING (Discrepancy detected!)\n";
+      }
+      cout << "========================================================\n";
+    }
   }
 
   MPI_Finalize();

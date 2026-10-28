@@ -42,3 +42,5 @@ desktop.ini
 
 # Logs & temp files
 *.log
+bin/
+scratch/
