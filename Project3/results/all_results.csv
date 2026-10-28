@@ -1,1 +1,1 @@
-timestamp,experiment,source_file,mpi_procs,omp_threads,num_runs,mean_time_s,min_time_s,max_time_s,stddev_s,all_runs
+timestamp,experiment,source_file,mpi_procs,omp_threads,num_runs,mean_time_s,speedup,efficiency,mean_comp_time_s,mean_comm_time_s,min_time_s,max_time_s,stddev_s,all_runs

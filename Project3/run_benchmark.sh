@@ -156,6 +156,8 @@ echo "[2/3] Executing $NUM_RUNS runs..."
 export OMP_NUM_THREADS="$OMP_THREADS"
 
 RUN_TIMES=()
+COMP_TIMES=()
+COMM_TIMES=()
 
 for ((k = 1; k <= NUM_RUNS; k++)); do
   LOG_FILE="${LOGS_DIR}/${EXP_ID}_run${k}_${TIMESTAMP}.log"
@@ -177,8 +179,14 @@ for ((k = 1; k <= NUM_RUNS; k++)); do
     TIME_VAL=$(grep -i "elapsed" "$LOG_FILE" | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
   fi
 
+  # Extract computation and communication times if instrumented
+  COMP_VAL=$(grep -i "Computation Time" "$LOG_FILE" | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
+  COMM_VAL=$(grep -i "Communication Time" "$LOG_FILE" | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
+
   if [ -n "$TIME_VAL" ]; then
     RUN_TIMES+=("$TIME_VAL")
+    [ -n "$COMP_VAL" ] && COMP_TIMES+=("$COMP_VAL")
+    [ -n "$COMM_VAL" ] && COMM_TIMES+=("$COMM_VAL")
     echo "Done! (${TIME_VAL} s)"
   else
     echo "Done! (Time parsing fallback, see log: $LOG_FILE)"
@@ -216,6 +224,46 @@ MIN_TIME=$(echo "$STATS" | awk '{print $2}')
 MAX_TIME=$(echo "$STATS" | awk '{print $3}')
 STDDEV_TIME=$(echo "$STATS" | awk '{print $4}')
 
+# Compute average computation and communication times if available
+MEAN_COMP_TIME="0.000000"
+if [ ${#COMP_TIMES[@]} -gt 0 ]; then
+  MEAN_COMP_TIME=$(awk -v k="${#COMP_TIMES[@]}" 'BEGIN {
+    sum = 0;
+    for (i = 1; i < ARGC; i++) sum += ARGV[i] + 0.0;
+    printf "%.6f\n", sum / k;
+  }' "${COMP_TIMES[@]}")
+fi
+
+MEAN_COMM_TIME="0.000000"
+if [ ${#COMM_TIMES[@]} -gt 0 ]; then
+  MEAN_COMM_TIME=$(awk -v k="${#COMM_TIMES[@]}" 'BEGIN {
+    sum = 0;
+    for (i = 1; i < ARGC; i++) sum += ARGV[i] + 0.0;
+    printf "%.6f\n", sum / k;
+  }' "${COMM_TIMES[@]}")
+fi
+
+# Track serial baseline time to compute Speedup and Parallel Efficiency
+SERIAL_TIME_FILE="${RESULTS_DIR}/serial_baseline_time.txt"
+SPEEDUP=""
+EFFICIENCY=""
+
+if [[ "$SOURCE_FILE" == *"serial"* ]]; then
+  echo "$MEAN_TIME" > "$SERIAL_TIME_FILE"
+  SPEEDUP="1.00"
+  EFFICIENCY="100.00%"
+elif [ -f "$SERIAL_TIME_FILE" ]; then
+  SERIAL_TIME=$(cat "$SERIAL_TIME_FILE" | tr -d '[:space:]')
+  if [ -n "$SERIAL_TIME" ]; then
+    SPEEDUP=$(awk -v s="$SERIAL_TIME" -v m="$MEAN_TIME" 'BEGIN {
+      if (m > 0) printf "%.2f", s / m; else print "N/A";
+    }')
+    EFFICIENCY=$(awk -v s="$SERIAL_TIME" -v m="$MEAN_TIME" -v p="$MPI_PROCS" 'BEGIN {
+      if (m > 0 && p > 0) printf "%.2f%%", (s / (m * p)) * 100.0; else print "N/A";
+    }')
+  fi
+fi
+
 # 7. Write Human-Readable Labeled Summary File
 {
   echo "================================================================================"
@@ -241,9 +289,15 @@ STDDEV_TIME=$(echo "$STATS" | awk '{print $4}')
   done
   echo "--------------------------------------------------------------------------------"
   printf "Mean Execution Time : %10.6f s\n" "$MEAN_TIME"
+  printf "  - Mean Comp Time  : %10.6f s\n" "$MEAN_COMP_TIME"
+  printf "  - Mean Comm Time  : %10.6f s\n" "$MEAN_COMM_TIME"
   printf "Min (Best) Time     : %10.6f s\n" "$MIN_TIME"
   printf "Max (Worst) Time    : %10.6f s\n" "$MAX_TIME"
   printf "Sample Std. Dev.    : %10.6f s\n" "$STDDEV_TIME"
+  if [ -n "$SPEEDUP" ]; then
+    printf "Parallel Speedup    : %10s\n" "${SPEEDUP}x"
+    printf "Parallel Efficiency : %10s\n" "$EFFICIENCY"
+  fi
   echo "================================================================================"
   echo ""
   echo "Detailed output from Run 1:"
@@ -253,18 +307,22 @@ STDDEV_TIME=$(echo "$STATS" | awk '{print $4}')
 
 # 8. Append to Master CSV File for Plotting
 if [ ! -f "$CSV_FILE" ]; then
-  echo "timestamp,experiment,source_file,mpi_procs,omp_threads,num_runs,mean_time_s,min_time_s,max_time_s,stddev_s,all_runs" > "$CSV_FILE"
+  echo "timestamp,experiment,source_file,mpi_procs,omp_threads,num_runs,mean_time_s,speedup,efficiency,mean_comp_time_s,mean_comm_time_s,min_time_s,max_time_s,stddev_s,all_runs" > "$CSV_FILE"
 fi
 
 ALL_RUNS_STR=$(IFS=';'; echo "${RUN_TIMES[*]}")
-echo "${TIMESTAMP},${EXP_ID},${SOURCE_FILE},${MPI_PROCS},${OMP_THREADS},${NUM_RUNS},${MEAN_TIME},${MIN_TIME},${MAX_TIME},${STDDEV_TIME},\"${ALL_RUNS_STR}\"" >> "$CSV_FILE"
+echo "${TIMESTAMP},${EXP_ID},${SOURCE_FILE},${MPI_PROCS},${OMP_THREADS},${NUM_RUNS},${MEAN_TIME},${SPEEDUP:-N/A},${EFFICIENCY:-N/A},${MEAN_COMP_TIME},${MEAN_COMM_TIME},${MIN_TIME},${MAX_TIME},${STDDEV_TIME},\"${ALL_RUNS_STR}\"" >> "$CSV_FILE"
 
 # 9. Console Output
 echo "[3/3] Results Successfully Saved!"
 echo "  -> Summary Text : $SUMMARY_FILE"
 echo "  -> Master CSV   : $CSV_FILE"
-echo "  -> Raw Logs     : $LOGS_DIR/"
+echo "  -> Raw Logs     : ${LOGS_DIR}/"
 echo "----------------------------------------------------------"
-printf "  => MEAN TIME: %10.6f s (Min: %.6f, Max: %.6f, StdDev: %.6f)\n" "$MEAN_TIME" "$MIN_TIME" "$MAX_TIME" "$STDDEV_TIME"
+echo "  => MEAN TIME    : ${MEAN_TIME} s (Min: ${MIN_TIME}, Max: ${MAX_TIME}, StdDev: ${STDDEV_TIME})"
+if [ -n "$SPEEDUP" ]; then
+  echo "  => SPEEDUP      : ${SPEEDUP}x | EFFICIENCY: ${EFFICIENCY}"
+fi
+echo "  => COMPUTATION  : ${MEAN_COMP_TIME} s | COMMUNICATION: ${MEAN_COMM_TIME} s"
 echo "=========================================================="
 

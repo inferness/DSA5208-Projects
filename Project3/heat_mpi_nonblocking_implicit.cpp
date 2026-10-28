@@ -91,11 +91,14 @@ int main(int argc, char *argv[]) {
   long long totalJacobiIters = 0;
   int nonConvergedSteps = 0;
   double localMaxResidualOverall = 0.0;
+  double local_comp_time = 0.0;
+  double local_comm_time = 0.0;
 
   for (int t = 0; t < STEPS; t++) {
     int iter = 0;
     for (; iter < MAX_JACOBI_ITERS; iter++) {
 
+      double t_comm0 = MPI_Wtime();
       // 1. Post non-blocking halo receives into ghost rows
       MPI_Irecv(&u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &reqs[0]);
       MPI_Irecv(&u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0, MPI_COMM_WORLD, &reqs[1]);
@@ -103,7 +106,9 @@ int main(int argc, char *argv[]) {
       // 2. Post non-blocking sends of boundary rows
       MPI_Isend(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0, MPI_COMM_WORLD, &reqs[2]);
       MPI_Isend(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1, MPI_COMM_WORLD, &reqs[3]);
+      local_comm_time += (MPI_Wtime() - t_comm0);
 
+      double t_comp0 = MPI_Wtime();
       double localMaxDiff = 0.0;
 
       // 3. Overlap computation: update interior rows (i = 2 to localRows - 1)
@@ -129,10 +134,14 @@ int main(int argc, char *argv[]) {
           if (diff > localMaxDiff) localMaxDiff = diff;
         }
       }
+      local_comp_time += (MPI_Wtime() - t_comp0);
 
       // 4. Wait for non-blocking halo exchanges to complete
+      double t_wait = MPI_Wtime();
       MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE);
+      local_comm_time += (MPI_Wtime() - t_wait);
 
+      double t_comp1 = MPI_Wtime();
       // 5. Update top boundary row (i = 1) using newly arrived top halo
       if (localRows >= 1) {
         int globalRow = startRow;
@@ -181,10 +190,13 @@ int main(int argc, char *argv[]) {
 
       // Prepare for next Jacobi iteration
       u_curr.swap(u_next);
+      local_comp_time += (MPI_Wtime() - t_comp1);
 
       // Check global convergence across all ranks
+      double t_comm1 = MPI_Wtime();
       double globalMaxDiff = 0.0;
       MPI_Allreduce(&localMaxDiff, &globalMaxDiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+      local_comm_time += (MPI_Wtime() - t_comm1);
 
       if (globalMaxDiff < TOL) {
         iter++;
@@ -227,6 +239,10 @@ int main(int argc, char *argv[]) {
   double maxTime = 0.0;
   MPI_Reduce(&localTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
+  double maxCompTime = 0.0, maxCommTime = 0.0;
+  MPI_Reduce(&local_comp_time, &maxCompTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_comm_time, &maxCommTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
   double globalMaxResidual = 0.0;
   MPI_Reduce(&localMaxResidualOverall, &globalMaxResidual, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
@@ -258,7 +274,12 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
     cout << fixed << setprecision(6);
     cout << "========================================================\n";
-    cout << "Execution time       : " << maxTime << " seconds\n";
+    cout << "Execution time       : " << fixed << setprecision(6) << maxTime << " seconds\n";
+    double compPct = (maxTime > 0.0) ? (maxCompTime / maxTime * 100.0) : 0.0;
+    double commPct = (maxTime > 0.0) ? (maxCommTime / maxTime * 100.0) : 0.0;
+    cout << "  - Computation Time : " << fixed << setprecision(6) << maxCompTime << " seconds (" << fixed << setprecision(2) << compPct << "%)\n";
+    cout << "  - Communication Time: " << fixed << setprecision(6) << maxCommTime << " seconds (" << fixed << setprecision(2) << commPct << "%)\n";
+    cout << fixed << setprecision(6);
     if (STEPS > 0) {
       cout << "Time per time step   : " << (maxTime / STEPS) * 1000.0 << " ms\n";
       cout << "Avg Jacobi iters/step: " << (double)totalJacobiIters / STEPS << "\n";
@@ -347,3 +368,4 @@ int main(int argc, char *argv[]) {
   MPI_Finalize();
   return 0;
 }
+

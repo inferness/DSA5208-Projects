@@ -207,6 +207,8 @@ int main(int argc, char* argv[]) {
   cout << fixed << setprecision(6);
   cout << "========================================================\n";
   cout << "Execution time       : " << elapsed << " seconds\n";
+  cout << "  - Computation Time : " << elapsed << " seconds (100.00%)\n";
+  cout << "  - Communication Time: 0.000000 seconds (0.00%)\n";
   if (STEPS > 0) {
     cout << "Time per time step   : " << (elapsed / STEPS) * 1000.0 << " ms\n";
     cout << "Avg Jacobi iters/step: " << (double)totalJacobiIters / STEPS << "\n";
