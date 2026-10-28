@@ -21,20 +21,22 @@ N="${1:-3000}"
 STEPS="${2:-1000}"
 RUNS="${3:-5}"
 
-# If running under PBS Pro, detect allocated slots if PROCS_LIST not explicitly set
+# Target process counts: 1, 4, 16, 64
+# (These form perfect square process grids for 2D block decomposition: 1x1, 2x2, 4x4, 8x8)
+DEFAULT_PROCS="1 4 16 64"
+
 if [ -n "${PBS_NODEFILE:-}" ] && [ -z "${PROCS_LIST:-}" ]; then
   TOTAL_SLOTS=$(wc -l < "$PBS_NODEFILE")
   echo "PBS environment detected: $TOTAL_SLOTS slots allocated."
-  # Generate powers of 2 up to TOTAL_SLOTS
-  DETECTED_PROCS=""
-  p=1
-  while [ "$p" -le "$TOTAL_SLOTS" ]; do
-    DETECTED_PROCS="$DETECTED_PROCS $p"
-    p=$((p * 2))
+  VALID_PROCS=""
+  for p in $DEFAULT_PROCS; do
+    if [ "$p" -le "$TOTAL_SLOTS" ]; then
+      VALID_PROCS="$VALID_PROCS $p"
+    fi
   done
-  PROCS_LIST="${DETECTED_PROCS# }"
+  PROCS_LIST="${VALID_PROCS# }"
 else
-  PROCS_LIST="${PROCS_LIST:-1 2 4 8 16 32 64}"
+  PROCS_LIST="${PROCS_LIST:-$DEFAULT_PROCS}"
 fi
 
 echo "=========================================================="
