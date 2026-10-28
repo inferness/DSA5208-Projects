@@ -44,3 +44,5 @@ desktop.ini
 *.log
 bin/
 scratch/
+results/*.bin
+results/logs/

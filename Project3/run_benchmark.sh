@@ -132,7 +132,7 @@ echo "----------------------------------------------------------"
 
 # 4. Prepare MPI runner command
 RUN_CMD=()
-if [ "$NEEDS_MPI" = true ] && [ "$MPI_PROCS" -gt 1 ]; then
+if [ "$NEEDS_MPI" = true ]; then
   # Check if mpirun or srun is preferred
   if command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
     RUN_CMD=(srun -n "$MPI_PROCS")

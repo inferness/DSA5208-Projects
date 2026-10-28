@@ -1,52 +1,79 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Automated Scaling Experiment Sweeper (for Atlas / HPC)
+# Automated Scaling Experiment Sweeper (for Atlas HPC & Local Benchmarking)
 # ==============================================================================
-# Automatically compiles and benchmarks:
-#   1. Serial Baseline (5 runs)
-#   2. MPI 1D Row Decomposition across processes: 1, 2, 4, 8, 16 (5 runs each)
-#   3. MPI 2D Block Decomposition across processes: 1, 2, 4, 8, 16 (5 runs each)
-#   4. Hybrid MPI+OpenMP across combinations (e.g. 2x4, 4x2)
+# Benchmarks all 5 configurations of the 2D Heat Equation Implicit Solver:
+#   1. Serial Baseline (heat_serial_implicit.cpp)
+#   2. 1D Row Decomposition + Blocking Communication (heat_mpi_implicit.cpp)
+#   3. 1D Row Decomposition + Non-blocking Overlap (heat_mpi_nonblocking_implicit.cpp)
+#   4. 2D Block Decomposition + Blocking Communication (heat_mpi_block_implicit.cpp)
+#   5. 2D Block Decomposition + Non-blocking Overlap (heat_mpi_block_nonblocking_implicit.cpp)
+#   [Bonus: Hybrid MPI + OpenMP (heat_mpi_openMP_implicit.cpp)]
 #
-# All results, statistics (Mean, Min, Max, StdDev), and raw logs are written
-# to ./results/ and appended to ./results/all_results.csv.
+# All execution times, speedups, and statistics (Mean, Min, Max, StdDev) are
+# automatically computed and appended to ./results/all_results.csv.
 # ==============================================================================
 
 set -euo pipefail
 
-RUNS=5
-
-# Grid parameters (adjust as requested by your assignment):
-# Default: N=1000, STEPS=1000
-N="${1:-1000}"
+# Simulation parameters (Default: N=3000, STEPS=1000, RUNS=5)
+N="${1:-3000}"
 STEPS="${2:-1000}"
+RUNS="${3:-5}"
+
+# If running under PBS Pro, detect allocated slots if PROCS_LIST not explicitly set
+if [ -n "${PBS_NODEFILE:-}" ] && [ -z "${PROCS_LIST:-}" ]; then
+  TOTAL_SLOTS=$(wc -l < "$PBS_NODEFILE")
+  echo "PBS environment detected: $TOTAL_SLOTS slots allocated."
+  # Generate powers of 2 up to TOTAL_SLOTS
+  DETECTED_PROCS=""
+  p=1
+  while [ "$p" -le "$TOTAL_SLOTS" ]; do
+    DETECTED_PROCS="$DETECTED_PROCS $p"
+    p=$((p * 2))
+  done
+  PROCS_LIST="${DETECTED_PROCS# }"
+else
+  PROCS_LIST="${PROCS_LIST:-1 2 4 8 16 32 64}"
+fi
 
 echo "=========================================================="
 echo " Starting Full HPC Experiment Benchmark Sweep"
 echo " Problem Size: N=$N, STEPS=$STEPS, Repetitions=$RUNS"
+echo " Process Counts to Sweep: $PROCS_LIST"
 echo "=========================================================="
 
 # 1. Serial Implicit Baseline
-echo -e "\n>>> [1/4] Benchmarking Serial Baseline..."
+echo -e "\n>>> [1/5] Benchmarking Configuration 1: Serial Baseline..."
 ./run_benchmark.sh heat_serial_implicit.cpp 1 1 "$RUNS" "$N" "$STEPS"
 
-# 2. MPI 1D Implicit Scaling Sweep
-echo -e "\n>>> [2/4] Benchmarking MPI 1D Decomposition (p = 1, 2, 4, 8, 16)..."
-for p in 1 2 4 8 16; do
+# 2. MPI 1D Row Decomposition + Blocking Communication
+echo -e "\n>>> [2/5] Benchmarking Configuration 2: 1D Row Decomposition (Blocking)..."
+for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done
 
-# 3. MPI 2D Block Implicit Scaling Sweep (if file exists)
-if [ -f "heat_mpi_block_implicit.cpp" ]; then
-  echo -e "\n>>> [3/4] Benchmarking MPI 2D Block Decomposition (p = 1, 2, 4, 8, 16)..."
-  for p in 1 2 4 8 16; do
-    ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
-  done
-fi
+# 3. MPI 1D Row Decomposition + Non-blocking Communication
+echo -e "\n>>> [3/5] Benchmarking Configuration 3: 1D Row Decomposition (Non-blocking Overlap)..."
+for p in $PROCS_LIST; do
+  ./run_benchmark.sh heat_mpi_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+done
 
-# 4. Hybrid MPI + OpenMP Implicit Sweep (if file exists)
-if [ -f "heat_mpi_openMP_implicit.cpp" ]; then
-  echo -e "\n>>> [4/4] Benchmarking Hybrid MPI + OpenMP..."
+# 4. MPI 2D Block Decomposition + Blocking Communication
+echo -e "\n>>> [4/5] Benchmarking Configuration 4: 2D Block Decomposition (Blocking)..."
+for p in $PROCS_LIST; do
+  ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+done
+
+# 5. MPI 2D Block Decomposition + Non-blocking Communication
+echo -e "\n>>> [5/5] Benchmarking Configuration 5: 2D Block Decomposition (Non-blocking Overlap)..."
+for p in $PROCS_LIST; do
+  ./run_benchmark.sh heat_mpi_block_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+done
+
+# Optional: Hybrid MPI + OpenMP (if present)
+if [ -f "heat_mpi_openMP_implicit.cpp" ] && [ "${RUN_HYBRID:-false}" = "true" ]; then
+  echo -e "\n>>> [Bonus] Benchmarking Hybrid MPI + OpenMP..."
   ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 1 4 "$RUNS" "$N" "$STEPS"
   ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 2 4 "$RUNS" "$N" "$STEPS"
   ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 4 2 "$RUNS" "$N" "$STEPS"
@@ -54,8 +81,7 @@ if [ -f "heat_mpi_openMP_implicit.cpp" ]; then
 fi
 
 echo -e "\n=========================================================="
-echo " Benchmark Sweep Finished!"
-echo " Results Directory: ./results/"
+echo " Benchmark Sweep Finished Successfully!"
+echo " Results Directory : ./results/"
 echo " Summary CSV Table : ./results/all_results.csv"
 echo "=========================================================="
-

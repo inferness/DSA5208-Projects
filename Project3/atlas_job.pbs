@@ -1,15 +1,19 @@
 #!/bin/bash
 # ==============================================================================
-# PBS Pro Batch Job Script for NUS Atlas HPC Cluster
+# PBS Pro Batch Job Script for NUS Atlas HPC Cluster (atlas8 / atlas9)
 # ==============================================================================
+# Direct job to the active 'parallel' queue:
+#PBS -q parallel
+#
 # Job Name:
-#PBS -N heat_benchmark
+#PBS -N heat_implicit_sweep
 #
-# Request 1 compute node with 16 CPUs and 16 MPI process slots:
-#PBS -l select=1:ncpus=16:mpiprocs=16
+# Resource Request: 1 compute node with 64 CPUs, 64 MPI slots, and 64 GB RAM:
+# (If you prefer 32 cores, change ncpus=32:mpiprocs=32)
+#PBS -l select=1:ncpus=64:mpiprocs=64:mem=64gb
 #
-# Request maximum wallclock run time (e.g., 1 hour):
-#PBS -l walltime=01:00:00
+# Request maximum wallclock run time (2 hours for complete 5-config sweep):
+#PBS -l walltime=02:00:00
 #
 # Join standard output and standard error into a single log file:
 #PBS -j oe
@@ -18,30 +22,33 @@
 # Change to the directory from which the job was submitted:
 cd "$PBS_O_WORKDIR"
 
-# Load required modules:
-module load openmpi/4.1.2
+# Ensure results directory exists
+mkdir -p results bin
+
+# Load required cluster modules (Atlas environment):
+module purge
+module load gcc/9.2.0 openmpi/4.1.2 2>/dev/null || module load openmpi/4.1.2 2>/dev/null || true
 
 echo "=========================================================="
-echo "Job started on: $(hostname) at $(date)"
-echo "Working directory: $(pwd)"
-echo "=========================================================="
-
-# 1. Run Serial Baseline first (5 repetitions):
-./run_benchmark.sh heat_serial_implicit.cpp 1 1 5 1000 1000
-
-# 2. Run MPI 1D Implicit across process counts:
-for p in 1 2 4 8 16; do
-  ./run_benchmark.sh heat_mpi_implicit.cpp "$p" 1 5 1000 1000
-done
-
-# 3. Run MPI 2D Block Implicit across process counts:
-if [ -f "heat_mpi_block_implicit.cpp" ]; then
-  for p in 1 2 4 8 16; do
-    ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 5 1000 1000
-  done
+echo " Job started on : $(hostname) at $(date)"
+echo " Working Dir    : $(pwd)"
+echo " PBS Job ID     : ${PBS_JOBID:-N/A}"
+echo " Alloc Nodefile : ${PBS_NODEFILE:-N/A}"
+if [ -n "${PBS_NODEFILE:-}" ]; then
+  echo " Allocated Cores: $(wc -l < "$PBS_NODEFILE")"
 fi
-
-echo "=========================================================="
-echo "Job finished at $(date)"
 echo "=========================================================="
 
+# Make sure all helper scripts are executable:
+chmod +x *.sh
+
+# Execute the complete 5-configuration sweep:
+# Syntax: ./sweep_experiments.sh [N] [STEPS] [REPETITIONS]
+# Default: N=3000, STEPS=1000, 5 runs each for all 5 configurations
+./sweep_experiments.sh 3000 1000 5
+
+echo "=========================================================="
+echo " Job finished at $(date)"
+echo " Results available in: $(pwd)/results/"
+echo " All Results Table   : $(pwd)/results/all_results.csv"
+echo "=========================================================="

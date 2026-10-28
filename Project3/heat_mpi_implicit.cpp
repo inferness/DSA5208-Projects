@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   // Default parameters matching heat_serial_implicit.cpp
-  int N = 1000;
+  int N = 3000;
   int STEPS = 1000;
   // Discretization parameters:
   // LAMBDA represents the dimensionless diffusion number (mesh Fourier number):

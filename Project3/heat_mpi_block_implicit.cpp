@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   // Default parameters matching heat_serial_implicit.cpp
-  int N = 1000;
+  int N = 3000;
   int STEPS = 1000;
   // Discretization parameters:
   // LAMBDA represents the dimensionless diffusion number (mesh Fourier number):
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
 
   if (rank == 0) {
     cout << "========================================================\n";
-    cout << "  2D Heat Equation - Implicit 2D Block Decomposition   \n";
+    cout << "  2D Heat Equation - Implicit 2D Block (Blocking)      \n";
     cout << "  Method: Backward Euler with Jacobi Iterative Solver   \n";
     cout << "========================================================\n";
     cout << "Grid size (N x N)    : " << N << " x " << N << "\n";
@@ -155,28 +155,26 @@ int main(int argc, char *argv[]) {
 
     for (; iter < MAX_JACOBI_ITERS; iter++) {
 
-      // Non-blocking 4-way halo exchange (all directions transfer concurrently)
-      MPI_Request reqs[8];
+      // 4-way halo exchange using blocking MPI_Sendrecv
+      // 1. Send first row to up, receive bottom halo from down
+      MPI_Sendrecv(&u_curr[idx(1, 1)], localCols, MPI_DOUBLE, up, 0,
+                   &u_curr[idx(localRows + 1, 1)], localCols, MPI_DOUBLE, down, 0,
+                   cart_comm, MPI_STATUS_IGNORE);
 
-      // North / South (contiguous rows)
-      MPI_Isend(&u_curr[idx(1, 1)], localCols, MPI_DOUBLE, up, 0, cart_comm,
-                &reqs[0]);
-      MPI_Irecv(&u_curr[idx(localRows + 1, 1)], localCols, MPI_DOUBLE, down, 0,
-                cart_comm, &reqs[1]);
-      MPI_Isend(&u_curr[idx(localRows, 1)], localCols, MPI_DOUBLE, down, 1,
-                cart_comm, &reqs[2]);
-      MPI_Irecv(&u_curr[idx(0, 1)], localCols, MPI_DOUBLE, up, 1, cart_comm,
-                &reqs[3]);
+      // 2. Send last row to down, receive top halo from up
+      MPI_Sendrecv(&u_curr[idx(localRows, 1)], localCols, MPI_DOUBLE, down, 1,
+                   &u_curr[idx(0, 1)], localCols, MPI_DOUBLE, up, 1,
+                   cart_comm, MPI_STATUS_IGNORE);
 
-      // West / East (non-contiguous strided columns)
-      MPI_Isend(&u_curr[idx(1, 1)], 1, col_type, left, 2, cart_comm, &reqs[4]);
-      MPI_Irecv(&u_curr[idx(1, localCols + 1)], 1, col_type, right, 2,
-                cart_comm, &reqs[5]);
-      MPI_Isend(&u_curr[idx(1, localCols)], 1, col_type, right, 3, cart_comm,
-                &reqs[6]);
-      MPI_Irecv(&u_curr[idx(1, 0)], 1, col_type, left, 3, cart_comm, &reqs[7]);
+      // 3. Send first column to left, receive right halo from right
+      MPI_Sendrecv(&u_curr[idx(1, 1)], 1, col_type, left, 2,
+                   &u_curr[idx(1, localCols + 1)], 1, col_type, right, 2,
+                   cart_comm, MPI_STATUS_IGNORE);
 
-      MPI_Waitall(8, reqs, MPI_STATUSES_IGNORE);
+      // 4. Send last column to right, receive left halo from left
+      MPI_Sendrecv(&u_curr[idx(1, localCols)], 1, col_type, right, 3,
+                   &u_curr[idx(1, 0)], 1, col_type, left, 3,
+                   cart_comm, MPI_STATUS_IGNORE);
 
       double localMaxDiff = 0.0;
 
@@ -239,26 +237,18 @@ int main(int argc, char *argv[]) {
     // Calculate maximum absolute residual r = b - A*u^{n+1} on the FINAL time
     // step only
     if (t == STEPS - 1) {
-      MPI_Request res_reqs[8];
-      MPI_Isend(&u_curr[idx(1, 1)], localCols, MPI_DOUBLE, up, 0, cart_comm,
-                &res_reqs[0]);
-      MPI_Irecv(&u_curr[idx(localRows + 1, 1)], localCols, MPI_DOUBLE, down, 0,
-                cart_comm, &res_reqs[1]);
-      MPI_Isend(&u_curr[idx(localRows, 1)], localCols, MPI_DOUBLE, down, 1,
-                cart_comm, &res_reqs[2]);
-      MPI_Irecv(&u_curr[idx(0, 1)], localCols, MPI_DOUBLE, up, 1, cart_comm,
-                &res_reqs[3]);
-
-      MPI_Isend(&u_curr[idx(1, 1)], 1, col_type, left, 2, cart_comm,
-                &res_reqs[4]);
-      MPI_Irecv(&u_curr[idx(1, localCols + 1)], 1, col_type, right, 2,
-                cart_comm, &res_reqs[5]);
-      MPI_Isend(&u_curr[idx(1, localCols)], 1, col_type, right, 3, cart_comm,
-                &res_reqs[6]);
-      MPI_Irecv(&u_curr[idx(1, 0)], 1, col_type, left, 3, cart_comm,
-                &res_reqs[7]);
-
-      MPI_Waitall(8, res_reqs, MPI_STATUSES_IGNORE);
+      MPI_Sendrecv(&u_curr[idx(1, 1)], localCols, MPI_DOUBLE, up, 0,
+                   &u_curr[idx(localRows + 1, 1)], localCols, MPI_DOUBLE, down, 0,
+                   cart_comm, MPI_STATUS_IGNORE);
+      MPI_Sendrecv(&u_curr[idx(localRows, 1)], localCols, MPI_DOUBLE, down, 1,
+                   &u_curr[idx(0, 1)], localCols, MPI_DOUBLE, up, 1,
+                   cart_comm, MPI_STATUS_IGNORE);
+      MPI_Sendrecv(&u_curr[idx(1, 1)], 1, col_type, left, 2,
+                   &u_curr[idx(1, localCols + 1)], 1, col_type, right, 2,
+                   cart_comm, MPI_STATUS_IGNORE);
+      MPI_Sendrecv(&u_curr[idx(1, localCols)], 1, col_type, right, 3,
+                   &u_curr[idx(1, 0)], 1, col_type, left, 3,
+                   cart_comm, MPI_STATUS_IGNORE);
 
       double stepLocalMaxResidual = 0.0;
       for (int i = i_start; i <= i_end; i++) {
