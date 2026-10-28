@@ -55,8 +55,23 @@ CSV_FILE="${RESULTS_DIR}/all_results.csv"
 
 mkdir -p "./bin" "$RESULTS_DIR" "$LOGS_DIR"
 
-# 2. Detect Compiler & Flags (Platform Aware: Linux / Atlas vs macOS)
+# 2. Detect Compiler & Hardware Details (Platform Aware: Linux / Atlas vs macOS)
 OS="$(uname -s)"
+NODE_HOST="$(hostname)"
+
+if [ "$OS" = "Darwin" ]; then
+  CPU_MODEL="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'Apple Silicon')"
+  CPU_CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo 'Unknown')"
+  TOTAL_RAM="$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.2f GB\n", $1/1024/1024/1024}' || echo 'Unknown')"
+  CACHE_INFO="$(sysctl -n hw.l3cachesize 2>/dev/null | awk '{if ($1>0) printf "%.0f KB (L3)\n", $1/1024}' || sysctl -n hw.l2cachesize 2>/dev/null | awk '{if ($1>0) printf "%.0f KB (L2)\n", $1/1024}' || echo 'N/A')"
+else
+  CPU_MODEL="$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || lscpu 2>/dev/null | grep "Model name" | cut -d: -f2 | xargs || echo 'Unknown CPU')"
+  CPU_CORES="$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 'Unknown')"
+  TOTAL_RAM="$(free -h 2>/dev/null | awk '/^Mem:/ {print $2}' || awk '/MemTotal/ {printf "%.2f GB\n", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 'Unknown')"
+  CACHE_INFO="$(lscpu 2>/dev/null | grep "L3 cache" | cut -d: -f2 | xargs || echo 'N/A')"
+fi
+[ -z "$CACHE_INFO" ] && CACHE_INFO="N/A"
+
 NEEDS_MPI=false
 NEEDS_OMP=false
 
@@ -68,7 +83,13 @@ if grep -q "<omp.h>" "$SOURCE_FILE" || grep -q "#pragma omp" "$SOURCE_FILE"; the
 fi
 
 echo "=========================================================="
-echo "  HPC Experiment Runner"
+echo "  Compute Node Hardware Details"
+echo "=========================================================="
+echo "Node Hostname   : $NODE_HOST"
+echo "CPU Model       : $CPU_MODEL"
+echo "Total CPU Cores : $CPU_CORES"
+echo "Total RAM       : $TOTAL_RAM"
+echo "Cache Info      : $CACHE_INFO"
 echo "=========================================================="
 echo "Target Source   : $SOURCE_FILE"
 echo "Experiment ID   : $EXP_ID"
@@ -200,7 +221,11 @@ STDDEV_TIME=$(echo "$STATS" | awk '{print $4}')
   echo "================================================================================"
   echo "Experiment Summary: ${EXP_ID}"
   echo "Timestamp          : $(date)"
-  echo "Host               : $(hostname)"
+  echo "Node Hostname      : ${NODE_HOST}"
+  echo "CPU Model          : ${CPU_MODEL}"
+  echo "Total CPU Cores    : ${CPU_CORES}"
+  echo "Total RAM          : ${TOTAL_RAM}"
+  echo "Cache Info         : ${CACHE_INFO}"
   echo "================================================================================"
   echo "Source Code        : ${SOURCE_FILE}"
   echo "Binary             : ${BINARY}"
