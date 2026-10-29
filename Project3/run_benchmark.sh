@@ -135,7 +135,7 @@ $CXX $CXXFLAGS "$SOURCE_FILE" -o "$BINARY"
 echo "      Compilation successful."
 echo "----------------------------------------------------------"
 
-# 4. Prepare MPI runner command
+# 4. Prepare runner command (with CPU core pinning for fair, repeatable benchmarks)
 RUN_CMD=()
 if [ "$NEEDS_MPI" = true ]; then
   # Check if mpirun or srun is preferred
@@ -146,13 +146,23 @@ if [ "$NEEDS_MPI" = true ]; then
     if [ "$OS" = "Darwin" ]; then
       RUN_CMD=(mpirun --oversubscribe --bind-to none -np "$MPI_PROCS")
     else
-      RUN_CMD=(mpirun -np "$MPI_PROCS")
+      # On Linux / HPC cluster, bind each MPI process to its dedicated core to prevent context switching
+      RUN_CMD=(mpirun --bind-to core -np "$MPI_PROCS")
     fi
   elif command -v mpiexec >/dev/null 2>&1; then
     RUN_CMD=(mpiexec -n "$MPI_PROCS")
   else
     echo "Warning: No MPI launcher found (mpirun/srun), running directly."
     RUN_CMD=()
+  fi
+else
+  # Serial execution: pin to core 0 and local memory to prevent NUMA migration penalty
+  if [ "$OS" = "Linux" ]; then
+    if command -v numactl >/dev/null 2>&1; then
+      RUN_CMD=(numactl --physcpubind=0 --localalloc)
+    elif command -v taskset >/dev/null 2>&1; then
+      RUN_CMD=(taskset -c 0)
+    fi
   fi
 fi
 
