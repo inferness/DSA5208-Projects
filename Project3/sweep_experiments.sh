@@ -72,6 +72,19 @@ for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_block_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done
 
+# Optional: 2D Block Decomposition with Contiguous Buffer Packing
+if [ "${RUN_CONTIGUOUS:-false}" = "true" ]; then
+  echo -e "\n>>> [Bonus] Benchmarking 2D Block (Contiguous Packing - Blocking)..."
+  for p in $PROCS_LIST; do
+    ./run_benchmark.sh heat_mpi_block_contiguous_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  done
+
+  echo -e "\n>>> [Bonus] Benchmarking 2D Block (Contiguous Packing - Non-blocking Overlap)..."
+  for p in $PROCS_LIST; do
+    ./run_benchmark.sh heat_mpi_block_contiguous_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  done
+fi
+
 # Optional: Hybrid MPI + OpenMP (if present)
 if [ -f "heat_mpi_openMP_implicit.cpp" ] && [ "${RUN_HYBRID:-false}" = "true" ]; then
   echo -e "\n>>> [Bonus] Benchmarking Hybrid MPI + OpenMP..."
