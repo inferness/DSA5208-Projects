@@ -35,6 +35,9 @@ export LD_LIBRARY_PATH="/app1/centos6.3/gnu/mpfr-2.4.2/lib:/app1/centos6.3/gnu/g
 export OMPI_MCA_mpi_yield_when_idle=1
 export PRTE_MCA_mpi_yield_when_idle=1
 
+# Enable benchmarking of the 2 new contiguous buffer packing implementations:
+export RUN_CONTIGUOUS=true
+
 echo "=========================================================="
 echo " Job started on : $(hostname) at $(date)"
 echo " Working Dir    : $(pwd)"
