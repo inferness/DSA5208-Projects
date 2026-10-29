@@ -8,12 +8,12 @@
 # Job Name:
 #PBS -N heat_implicit_sweep
 #
-# Resource Request: 1 compute node with 64 CPUs, 64 MPI slots, and 64 GB RAM:
-# (If you prefer 32 cores, change ncpus=32:mpiprocs=32)
-#PBS -l select=1:ncpus=64:mpiprocs=64:mem=64gb
+# Resource Request: 1 compute node with 32 CPUs, 32 MPI slots, and 32 GB RAM:
+# (32 cores schedules much faster in the parallel queue)
+#PBS -l select=1:ncpus=32:mpiprocs=32:mem=32gb
 #
-# Request maximum wallclock run time (2 hours for complete 5-config sweep):
-#PBS -l walltime=02:00:00
+# Request maximum wallclock run time (1.5 hours):
+#PBS -l walltime=01:30:00
 #
 # Join standard output and standard error into a single log file:
 #PBS -j oe

@@ -21,9 +21,9 @@ N="${1:-3000}"
 STEPS="${2:-1000}"
 RUNS="${3:-5}"
 
-# Target process counts: 1, 4, 16, 64
-# (These form perfect square process grids for 2D block decomposition: 1x1, 2x2, 4x4, 8x8)
-DEFAULT_PROCS="1 4 16 64"
+# Target process counts: 1, 4, 16, 32
+# (1, 4, 16 are square 2D grids 1x1, 2x2, 4x4; 32 utilizes the full 32-core allocation)
+DEFAULT_PROCS="1 4 16 32"
 
 if [ -n "${PBS_NODEFILE:-}" ] && [ -z "${PROCS_LIST:-}" ]; then
   TOTAL_SLOTS=$(wc -l < "$PBS_NODEFILE")
