@@ -55,6 +55,11 @@ CSV_FILE="${RESULTS_DIR}/all_results.csv"
 
 mkdir -p "./bin" "$RESULTS_DIR" "$LOGS_DIR"
 
+# Ensure Atlas cluster GCC libraries (MPFR, GMP, MPC) are present if running on Atlas:
+if [ -d "/app1/centos6.3/gnu/mpfr-2.4.2/lib" ]; then
+  export LD_LIBRARY_PATH="/app1/centos6.3/gnu/mpfr-2.4.2/lib:/app1/centos6.3/gnu/gmp-4.3.2/lib:/app1/centos6.3/gnu/mpc-0.8.1/lib:${LD_LIBRARY_PATH:-}"
+fi
+
 # 2. Detect Compiler & Hardware Details (Platform Aware: Linux / Atlas vs macOS)
 OS="$(uname -s)"
 NODE_HOST="$(hostname)"

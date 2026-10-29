@@ -26,8 +26,10 @@ cd "$PBS_O_WORKDIR"
 mkdir -p results bin
 
 # Load required cluster modules (Atlas environment):
-module purge
-module load gcc/9.2.0 openmpi/4.1.2 2>/dev/null || module load openmpi/4.1.2 2>/dev/null || true
+module load gcc/7.3.0 openmpi/4.1.2 2>/dev/null || module load openmpi/4.1.2 2>/dev/null || true
+
+# Fix Atlas CentOS 7 GCC runtime library dependencies (MPFR, GMP, MPC):
+export LD_LIBRARY_PATH="/app1/centos6.3/gnu/mpfr-2.4.2/lib:/app1/centos6.3/gnu/gmp-4.3.2/lib:/app1/centos6.3/gnu/mpc-0.8.1/lib:${LD_LIBRARY_PATH:-}"
 
 echo "=========================================================="
 echo " Job started on : $(hostname) at $(date)"
