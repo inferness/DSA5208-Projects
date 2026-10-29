@@ -156,12 +156,19 @@ if [ "$NEEDS_MPI" = true ]; then
     RUN_CMD=()
   fi
 else
-  # Serial execution: pin to core 0 and local memory to prevent NUMA migration penalty
+  # Serial execution: pin to a dedicated core in the allocation to prevent NUMA migration penalty
   if [ "$OS" = "Linux" ]; then
-    if command -v numactl >/dev/null 2>&1; then
-      RUN_CMD=(numactl --physcpubind=0 --localalloc)
+    if command -v mpirun >/dev/null 2>&1; then
+      # OpenMPI automatically binds to the first valid core in the PBS allocation/cgroup
+      RUN_CMD=(mpirun --bind-to core -np 1)
     elif command -v taskset >/dev/null 2>&1; then
-      RUN_CMD=(taskset -c 0)
+      # Find the first allowed CPU in current affinity mask (handles PBS cgroups)
+      FIRST_CORE=$(taskset -cp $$ 2>/dev/null | grep -oE '[0-9]+' | head -n 1 || true)
+      if [ -n "$FIRST_CORE" ]; then
+        RUN_CMD=(taskset -c "$FIRST_CORE")
+      fi
+    elif command -v numactl >/dev/null 2>&1; then
+      RUN_CMD=(numactl --localalloc)
     fi
   fi
 fi
@@ -178,11 +185,19 @@ for ((k = 1; k <= NUM_RUNS; k++)); do
   LOG_FILE="${LOGS_DIR}/${EXP_ID}_run${k}_${TIMESTAMP}.log"
   echo -n "      -> Run $k / $NUM_RUNS ... "
 
-  # Run and log output
+  # Run and log output (capture exit code cleanly for error diagnostics)
+  EXIT_CODE=0
   if [ ${#RUN_CMD[@]} -gt 0 ]; then
-    "${RUN_CMD[@]}" "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1
+    "${RUN_CMD[@]}" "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
   else
-    "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1
+    "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
+  fi
+
+  if [ $EXIT_CODE -ne 0 ]; then
+    echo "FAILED! (Exit code: $EXIT_CODE)"
+    echo "      [ERROR] Output from $LOG_FILE:"
+    cat "$LOG_FILE" | head -n 20
+    exit $EXIT_CODE
   fi
 
   # Extract execution time (supports various formats printed by your codes)
