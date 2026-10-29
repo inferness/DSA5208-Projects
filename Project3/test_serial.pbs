@@ -1,0 +1,25 @@
+#!/bin/bash
+# ==============================================================================
+# Quick 1-Core Serial Test on Actual Compute Node Hardware
+# ==============================================================================
+#PBS -q parallel
+#PBS -N test_serial
+#PBS -l select=1:ncpus=1:mpiprocs=1:mem=4gb
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -o results/test_serial.log
+
+cd "$PBS_O_WORKDIR"
+mkdir -p results bin
+
+# Load modules and library paths
+module load gcc/7.3.0 openmpi/4.1.2 2>/dev/null || true
+export LD_LIBRARY_PATH="/app1/centos6.3/gnu/mpfr-2.4.2/lib:/app1/centos6.3/gnu/gmp-4.3.2/lib:/app1/centos6.3/gnu/mpc-0.8.1/lib:${LD_LIBRARY_PATH:-}"
+
+echo "=========================================================="
+echo " Running on compute node: $(hostname)"
+echo " CPU Model: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
+echo "=========================================================="
+
+# Run serial code 1 time (with core pinning):
+./run_benchmark.sh heat_serial_implicit.cpp 1 1 1 3000 1000
