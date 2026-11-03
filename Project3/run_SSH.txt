@@ -1,0 +1,78 @@
+================================================================================
+                    NUS Atlas HPC & SSH Command Reference
+================================================================================
+Important: Make sure you are connected to the NUS VPN (Pulse Secure / Ivanti)
+before running any of these commands from your local Mac.
+
+--------------------------------------------------------------------------------
+1. SSH Login Commands
+--------------------------------------------------------------------------------
+Primary login node (atlas9):
+  ssh cornelius-axel.tjandra@atlas9.nus.edu.sg
+
+Alternative login node (atlas8 - use if atlas9 is unreachable):
+  ssh cornelius-axel.tjandra@atlas8.nus.edu.sg
+
+Direct IP login (use if local Mac DNS fails to resolve hostname):
+  ssh cornelius-axel.tjandra@172.19.119.12
+
+Force password authentication (skip local SSH key attempts):
+  ssh -o PubkeyAuthentication=no cornelius-axel.tjandra@atlas9.nus.edu.sg
+
+
+--------------------------------------------------------------------------------
+2. Download Results to Local Mac (Run from Mac Terminal, NOT on Atlas)
+--------------------------------------------------------------------------------
+Option A (Absolute full path):
+  scp -r "cornelius-axel.tjandra@atlas9.nus.edu.sg:~/DSA5208-Projects/Project3/results" "/Users/corneliusaxeltjandra/Documents/Distributed DB/Project3/"
+
+Option B (If your Mac terminal is already inside the Project3 directory):
+  scp -r "cornelius-axel.tjandra@atlas9.nus.edu.sg:~/DSA5208-Projects/Project3/results" .
+
+Alternative via Atlas8:
+  scp -r "cornelius-axel.tjandra@atlas8.nus.edu.sg:~/DSA5208-Projects/Project3/results" .
+
+
+--------------------------------------------------------------------------------
+3. Upload Code/Files from Local Mac to Atlas (Run from Mac Terminal)
+--------------------------------------------------------------------------------
+Upload current Project3 directory to Atlas:
+  scp -r "/Users/corneliusaxeltjandra/Documents/Distributed DB/Project3" cornelius-axel.tjandra@atlas9.nus.edu.sg:~/DSA5208-Projects/
+
+(Note: You can also update Atlas by running `git pull` directly inside Atlas).
+
+
+--------------------------------------------------------------------------------
+4. Common PBS Cluster Job Management Commands (Run inside Atlas SSH)
+--------------------------------------------------------------------------------
+Navigate to project directory:
+  cd ~/DSA5208-Projects/Project3
+
+Pull latest code:
+  git pull
+
+Submit batch job:
+  qsub -q parallel atlas_job.pbs
+
+Submit with custom core list (e.g. 1 4 16 32):
+  qsub -q parallel -v PROCS_LIST="1 4 16 32" atlas_job.pbs
+
+Check status of your running/queued jobs:
+  qstat -u cornelius-axel.tjandra
+
+Check wide status format (shows queue, elapsed time, state):
+  qstat -w -u cornelius-axel.tjandra
+
+Check why a queued job hasn't started yet:
+  qstat -f <JobID> | grep -i comment
+
+View full details of a specific job:
+  qstat -f <JobID>
+
+Cancel / delete a job:
+  qdel <JobID>
+
+Monitor real-time progress while job runs:
+  ls -lt results/logs/
+  tail -f results/pbs_job.log
+================================================================================
