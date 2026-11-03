@@ -105,11 +105,16 @@ echo "Extra Arguments : ${EXTRA_ARGS:-'(default parameters)'}"
 echo "Platform OS     : $OS"
 echo "----------------------------------------------------------"
 
-# Compiler selection
-if [ "$NEEDS_MPI" = true ]; then
-  CXX="${CXX:-mpicxx}"
-else
-  CXX="${CXX:-g++}"
+# Use the MPI compiler wrapper for every benchmark by default so serial and MPI
+# variants use the same underlying compiler and toolchain.
+if [ -z "${CXX:-}" ]; then
+  if command -v mpicxx >/dev/null 2>&1; then
+    CXX="mpicxx"
+  elif [ "$NEEDS_MPI" = true ]; then
+    CXX="mpicxx"
+  else
+    CXX="g++"
+  fi
 fi
 
 CXXFLAGS="-O3 -std=c++17"
@@ -138,8 +143,14 @@ echo "----------------------------------------------------------"
 # 4. Prepare runner command (with CPU core pinning for fair, repeatable benchmarks)
 RUN_CMD=()
 if [ "$NEEDS_MPI" = true ]; then
-  # Check if mpirun or srun is preferred
-  if command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
+  # Match the serial launcher's one-core binding for MPI p=1.
+  if [ "$OS" = "Linux" ] && [ "$MPI_PROCS" = "1" ] &&
+     command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
+    RUN_CMD=(srun -n 1 --cpu-bind=cores)
+  elif [ "$OS" = "Linux" ] && [ "$MPI_PROCS" = "1" ] &&
+       command -v mpirun >/dev/null 2>&1; then
+    RUN_CMD=(mpirun -np 1 --bind-to core)
+  elif command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
     RUN_CMD=(srun -n "$MPI_PROCS")
   elif command -v mpirun >/dev/null 2>&1; then
     if [ "$OS" = "Darwin" ]; then
@@ -162,7 +173,9 @@ else
   # mpirun --bind-to core -np 1 auto-detects the PBS cgroup and pins to the first
   # allowed core, giving the serial code the same single-core advantage as MPI p=1.
   if [ "$OS" = "Linux" ]; then
-    if command -v mpirun >/dev/null 2>&1; then
+    if command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
+      RUN_CMD=(srun -n 1 --cpu-bind=cores)
+    elif command -v mpirun >/dev/null 2>&1; then
       # Use mpirun with 1 process bound to a core — this respects PBS cgroups
       # and pins the serial process to prevent thread migration across NUMA dies.
       RUN_CMD=(mpirun -np 1 --bind-to core)
@@ -356,4 +369,3 @@ if [ -n "$SPEEDUP" ]; then
 fi
 echo "  => COMPUTATION  : ${MEAN_COMP_TIME} s | COMMUNICATION: ${MEAN_COMM_TIME} s"
 echo "=========================================================="
-
