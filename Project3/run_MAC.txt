@@ -1,268 +1,215 @@
-========================================
-Compilation and Execution Commands
-========================================
+================================================================================
+           Project 3: macOS Local Testing & Benchmarking Guide
+================================================================================
+This guide contains all compilation, single-run, and automated benchmark commands
+for running Project 3 locally on macOS (Apple Silicon / Intel).
 
-1. Serial Version - Explicit (heat_serial.cpp)
-----------------------------------------
+--------------------------------------------------------------------------------
+0. Setup & Prerequisites (One-time)
+--------------------------------------------------------------------------------
+If you want to run OpenMP on macOS with Clang:
+  brew install libomp open-mpi
+
+Verify installed tools:
+  clang++ --version
+  mpicxx --version
+  mpirun --version
+
+All executables can be built directly in the project root or placed into `bin/`.
+Ensure the helper folders exist:
+  mkdir -p bin results/logs
+
+================================================================================
+1. The 5 Main Configurations (Implicit Solver with Backward Euler + Jacobi)
+================================================================================
+All implicit implementations take the same optional command-line arguments:
+  ./<executable> [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
+  - Default: N=3000, STEPS=1000, LAMBDA=0.05, MAX_JACOBI_ITERS=25, TOL=1e-5
+  - Quick test parameters: N=500 STEPS=100 (runs in < 1 second)
+  - Medium test parameters: N=1000 STEPS=200 (runs in ~1-2 seconds)
+
+--------------------------------------------------------------------------------
+1.1 Configuration 1: Serial Baseline (heat_serial_implicit.cpp)
+--------------------------------------------------------------------------------
 Compile:
-  g++ -O3 heat_serial.cpp -o heat_serial
-  (or: clang++ -O3 heat_serial.cpp -o heat_serial)
+  clang++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
+  (or: g++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit)
+
+Run (default N=3000, STEPS=1000):
+  ./bin/heat_serial_implicit
+
+Quick Test:
+  ./bin/heat_serial_implicit 500 100
+
+--------------------------------------------------------------------------------
+1.2 Configuration 2: 1D Row Decomposition - Blocking (heat_mpi_implicit.cpp)
+--------------------------------------------------------------------------------
+Compile:
+  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o bin/heat_mpi_implicit
+
+Run (example: 1 process vs 4 processes):
+  # Single process (for 1-core baseline comparison):
+  mpirun -np 1 ./bin/heat_mpi_implicit
+
+  # 4 processes:
+  mpirun -np 4 ./bin/heat_mpi_implicit
+
+Quick Test:
+  mpirun -np 4 ./bin/heat_mpi_implicit 500 100
+
+--------------------------------------------------------------------------------
+1.3 Configuration 3: 1D Row Decomposition - Non-blocking Overlap
+    (heat_mpi_nonblocking_implicit.cpp)
+--------------------------------------------------------------------------------
+Compile:
+  mpicxx -O3 -std=c++17 heat_mpi_nonblocking_implicit.cpp -o bin/heat_mpi_nonblocking_implicit
 
 Run:
-  ./heat_serial
+  mpirun -np 1 ./bin/heat_mpi_nonblocking_implicit
+  mpirun -np 4 ./bin/heat_mpi_nonblocking_implicit
 
+Quick Test:
+  mpirun -np 4 ./bin/heat_mpi_nonblocking_implicit 500 100
 
-1b. Serial Version - Implicit (heat_serial_implicit.cpp)
-----------------------------------------
+--------------------------------------------------------------------------------
+1.4 Configuration 4: 2D Block Decomposition - Blocking
+    (heat_mpi_block_implicit.cpp)
+--------------------------------------------------------------------------------
 Compile:
-  g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit
-  (or: clang++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit)
+  mpicxx -O3 -std=c++17 heat_mpi_block_implicit.cpp -o bin/heat_mpi_block_implicit
 
-Run (default: N=3000, STEPS=1000):
-  ./heat_serial_implicit
+Run:
+  mpirun -np 1 ./bin/heat_mpi_block_implicit
+  mpirun -np 4 ./bin/heat_mpi_block_implicit
 
-Custom parameters: ./heat_serial_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
-  Example (N=500, STEPS=100):
-  ./heat_serial_implicit 500 100
+Quick Test:
+  mpirun -np 4 ./bin/heat_mpi_block_implicit 500 100
 
-
-
-
-2. MPI Version 1 - Blocking Sendrecv (heat_mpi.cpp)
-----------------------------------------
+--------------------------------------------------------------------------------
+1.5 Configuration 5: 2D Block Decomposition - Non-blocking Overlap
+    (heat_mpi_block_nonblocking_implicit.cpp)
+--------------------------------------------------------------------------------
 Compile:
-  mpicxx -O3 heat_mpi.cpp -o heat_mpi
+  mpicxx -O3 -std=c++17 heat_mpi_block_nonblocking_implicit.cpp -o bin/heat_mpi_block_nonblocking_implicit
 
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi
+Run:
+  mpirun -np 1 ./bin/heat_mpi_block_nonblocking_implicit
+  mpirun -np 4 ./bin/heat_mpi_block_nonblocking_implicit
 
+Quick Test:
+  mpirun -np 4 ./bin/heat_mpi_block_nonblocking_implicit 500 100
 
-3. MPI Version 2 - Non-blocking with Overlap (heat_mpi_v2.cpp)
-----------------------------------------
+--------------------------------------------------------------------------------
+1.6 Bonus Configurations: 2D Block with Contiguous Buffer Packing
+--------------------------------------------------------------------------------
+Eliminates MPI_Type_vector derived datatypes by manually packing column halos
+into contiguous 1D buffers:
+
 Compile:
-  mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2
+  mpicxx -O3 -std=c++17 heat_mpi_block_contiguous_implicit.cpp -o bin/heat_mpi_block_contiguous_implicit
+  mpicxx -O3 -std=c++17 heat_mpi_block_contiguous_nonblocking_implicit.cpp -o bin/heat_mpi_block_contiguous_nonblocking_implicit
 
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi_v2
+Run:
+  mpirun -np 4 ./bin/heat_mpi_block_contiguous_implicit 500 100
+  mpirun -np 4 ./bin/heat_mpi_block_contiguous_nonblocking_implicit 500 100
 
+--------------------------------------------------------------------------------
+1.7 Bonus Configuration: Hybrid MPI + OpenMP (heat_mpi_openMP_implicit.cpp)
+--------------------------------------------------------------------------------
+Compile (using Homebrew libomp):
+  mpicxx -O3 -std=c++17 -Xpreprocessor -fopenmp \
+    -I/opt/homebrew/opt/libomp/include \
+    -L/opt/homebrew/opt/libomp/lib -lomp \
+    heat_mpi_openMP_implicit.cpp -o bin/heat_mpi_openMP_implicit
 
-4. MPI Tiled Version - Cache Tiling (heat_mpi_tile.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile
-
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi_tile
-
-
-5. MPI 2D Block Decomposition (heat_mpi_block.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block
-
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi_block
-
-
-6. Hybrid MPI + OpenMP (heat_mpi_openMP.cpp)
-----------------------------------------
-Compile (using Homebrew libomp for Apple Clang):
-  mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP.cpp -o heat_mpi_openMP
-
-Run (example: 2 MPI processes, each running 4 OpenMP threads = 8 cores total):
-  OMP_NUM_THREADS=4 mpirun -np 2 ./heat_mpi_openMP
-
-
-7. MPI Version - Implicit Jacobi 1D Row (heat_mpi_implicit.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit
-
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi_implicit
-
-Custom parameters: mpirun -np <p> ./heat_mpi_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
-  Example (N=500, STEPS=100):
-  mpirun -np 4 ./heat_mpi_implicit 500 100
-
-
-8. MPI Version - Implicit Jacobi 2D Block (heat_mpi_block_implicit.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 heat_mpi_block_implicit.cpp -o heat_mpi_block_implicit
-
-Run (replace 4 with your desired number of MPI processes):
-  mpirun -np 4 ./heat_mpi_block_implicit
-
-Custom parameters: mpirun -np <p> ./heat_mpi_block_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
-  Example (N=500, STEPS=100):
-  mpirun -np 4 ./heat_mpi_block_implicit 500 100
-
-
-9. Hybrid MPI + OpenMP - Implicit Jacobi (heat_mpi_openMP_implicit.cpp)
-----------------------------------------
-Compile (using Homebrew libomp for Apple Clang):
-  mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit
-
-Run (example: 2 MPI processes, each running 2 OpenMP threads = 4 cores total):
-  OMP_NUM_THREADS=2 mpirun -np 2 ./heat_mpi_openMP_implicit
-
-Custom parameters: OMP_NUM_THREADS=<t> mpirun -np <p> ./heat_mpi_openMP_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
-
-
-========================================
-Quick One-Liners (Compile & Run)
-========================================
-
-# Serial Explicit:
-g++ -O3 heat_serial.cpp -o heat_serial && ./heat_serial
-
-# Serial Implicit:
-g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit && ./heat_serial_implicit
-
-# MPI v1 (1D Row):
-mpicxx -O3 heat_mpi.cpp -o heat_mpi && mpirun -np 4 ./heat_mpi
-
-# MPI v2 (Non-blocking):
-mpicxx -O3 heat_mpi_v2.cpp -o heat_mpi_v2 && mpirun -np 4 ./heat_mpi_v2
-
-# MPI Tiled:
-mpicxx -O3 heat_mpi_tile.cpp -o heat_mpi_tile && mpirun -np 4 ./heat_mpi_tile
-
-# MPI 2D Block:
-mpicxx -O3 heat_mpi_block.cpp -o heat_mpi_block && mpirun -np 4 ./heat_mpi_block
-
-# Hybrid MPI + OpenMP (Explicit):
-mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP.cpp -o heat_mpi_openMP && OMP_NUM_THREADS=4 mpirun -np 1 ./heat_mpi_openMP
-
-# MPI Implicit (1D Row):
-mpicxx -O3 heat_mpi_implicit.cpp -o heat_mpi_implicit && mpirun -np 4 ./heat_mpi_implicit
-
-# MPI Implicit (2D Block):
-mpicxx -O3 heat_mpi_block_implicit.cpp -o heat_mpi_block_implicit && mpirun -np 4 ./heat_mpi_block_implicit
-
-# Hybrid MPI + OpenMP (Implicit):
-mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit && OMP_NUM_THREADS=2 mpirun -np 2 ./heat_mpi_openMP_implicit
+Run (e.g. 2 MPI ranks x 2 OpenMP threads = 4 total workers):
+  OMP_NUM_THREADS=2 mpirun -np 2 ./bin/heat_mpi_openMP_implicit 500 100
 
 
 ================================================================================
-N-Body Simulation Commands
+2. Investigating Serial vs MPI 1-Core Performance (Locally)
 ================================================================================
+To investigate whether serial runs slower than MPI on a single core, you can run
+them side-by-side using the same test parameters:
 
-1. Serial Version (NBody_serial.cpp)
-----------------------------------------
-Compile:
-  g++ -O3 NBody_serial.cpp -o NBody_serial
-  (or: clang++ -O3 NBody_serial.cpp -o NBody_serial)
+Step 1: Compile both binaries with the same compiler & flags:
+  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
+  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o bin/heat_mpi_implicit
 
-Run (default: N=5000 bodies, STEPS=100):
-  ./NBody_serial
+Step 2: Run serial (1 core):
+  ./bin/heat_serial_implicit 1000 200
 
-Custom parameters: ./NBody_serial [N] [STEPS]
-  Example (2000 bodies, 50 steps):
-  ./NBody_serial 2000 50
+Step 3: Run MPI with 1 process (1 core):
+  mpirun -np 1 ./bin/heat_mpi_implicit 1000 200
 
-
-1b. Serial Cache-Blocked / Tiled Version (NBody_serial_block.cpp)
-----------------------------------------
-Compile:
-  g++ -O3 NBody_serial_block.cpp -o NBody_serial_block
-  (or: clang++ -O3 NBody_serial_block.cpp -o NBody_serial_block)
-
-Run (default: N=5000 bodies, STEPS=100, BLOCK_SIZE=256):
-  ./NBody_serial_block
-
-Custom parameters: ./NBody_serial_block [N] [STEPS] [BLOCK_SIZE]
-  Example (5000 bodies, 100 steps, block size 256):
-  ./NBody_serial_block 5000 100 256
-
-
-2. MPI Version (NBody_mpi.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 NBody_mpi.cpp -o NBody_mpi
-
-Run (default: N=5000 bodies, STEPS=100, replace 4 with number of processes):
-  mpirun -np 4 ./NBody_mpi
-
-Custom parameters: mpirun -np 4 ./NBody_mpi [N] [STEPS]
-  Example (2000 bodies, 50 steps):
-  mpirun -np 4 ./NBody_mpi 2000 50
-
-
-3. OpenMP Version (NBody_openMP.cpp)
-----------------------------------------
-Compile (using Homebrew libomp for Apple Clang):
-  clang++ -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp NBody_openMP.cpp -o NBody_openMP
-
-Run (uses all available CPU threads by default):
-  ./NBody_openMP
-
-Custom parameters: ./NBody_openMP [N] [STEPS] [NUM_THREADS]
-  Example (5000 bodies, 100 steps, 4 threads):
-  ./NBody_openMP 5000 100 4
-  (or via env):
-  OMP_NUM_THREADS=4 ./NBody_openMP
-
-
-4. Hybrid MPI + OpenMP Version (NBody_mpi_openMP.cpp)
-----------------------------------------
-Compile:
-  mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp NBody_mpi_openMP.cpp -o NBody_mpi_openMP
-
-Run (example: 2 MPI processes, each with 4 OpenMP threads = 8 workers total):
-  OMP_NUM_THREADS=4 mpirun -np 2 ./NBody_mpi_openMP
+Observations on Mac vs Atlas HPC:
+- On macOS (Unified Memory / Apple Silicon):
+  Serial runs slightly FASTER than MPI p=1 (e.g. ~0.63s vs ~0.80s) because there
+  is no MPI initialization, communicator setup, or halo branches.
+- On Atlas HPC (AMD EPYC multi-chiplet architecture):
+  If serial is not pinned to a specific core, the Linux kernel scheduler migrates
+  the thread across CCXs/NUMA dies, causing huge cache misses (~136s). Meanwhile,
+  OpenMPI pinned its process to 1 core (~81s). Using `mpirun -np 1 --bind-to core`
+  for the serial code levels the playing field.
 
 
 ================================================================================
-N-Body Quick One-Liners (Compile & Run)
+3. Automated Benchmarking Scripts (`run_benchmark.sh`)
 ================================================================================
+`run_benchmark.sh` automatically compiles, executes K repetitions, computes
+statistics (Mean, Min, Max, StdDev, Speedup, Efficiency), and records to CSV:
 
-# Serial:
-g++ -O3 NBody_serial.cpp -o NBody_serial && ./NBody_serial
+Syntax:
+  ./run_benchmark.sh <source.cpp> <mpi_procs> <omp_threads> [runs=5] [N] [STEPS]
 
-# Serial Blocked:
-g++ -O3 NBody_serial_block.cpp -o NBody_serial_block && ./NBody_serial_block
+Examples:
+  # 1. Benchmark serial implicit (5 runs, default size):
+  ./run_benchmark.sh heat_serial_implicit.cpp 1 1 5
 
-# MPI:
-mpicxx -O3 NBody_mpi.cpp -o NBody_mpi && mpirun -np 4 ./NBody_mpi
+  # 2. Benchmark MPI 1D implicit with 1 process (to compare with serial):
+  ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 5
 
-# OpenMP:
-clang++ -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp NBody_openMP.cpp -o NBody_openMP && OMP_NUM_THREADS=4 ./NBody_openMP
+  # 3. Benchmark MPI 1D implicit with 4 processes:
+  ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 5
 
-# Hybrid MPI + OpenMP:
-mpicxx -O3 -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -L/opt/homebrew/opt/libomp/lib -lomp NBody_mpi_openMP.cpp -o NBody_mpi_openMP && OMP_NUM_THREADS=4 mpirun -np 2 ./NBody_mpi_openMP
+  # 4. Fast benchmark with smaller problem size (N=1000, STEPS=200):
+  ./run_benchmark.sh heat_serial_implicit.cpp 1 1 3 1000 200
+  ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 3 1000 200
+  ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 3 1000 200
+
+Where results go:
+  - Text summary: ./results/<experiment_id>_summary.txt
+  - Master CSV  : ./results/all_results.csv
+  - Raw run logs: ./results/logs/*.log
 
 
 ================================================================================
-Automated Experiment & Benchmarking Helper (Atlas / HPC / Mac)
+4. Automated Full Sweep (`sweep_experiments.sh`)
 ================================================================================
+Runs all configurations across specified process counts.
 
-1. Run any single experiment K times with automatic mean calculation:
-   ./run_benchmark.sh <file.cpp> <mpi_procs> <omp_threads> [runs=5] [extra_args...]
+To run a fast test locally (N=1000, STEPS=100, 3 runs each, 1 and 4 cores):
+  PROCS_LIST="1 4" ./sweep_experiments.sh 1000 100 3
 
-   Examples:
-     # Run MPI implicit with 4 processes, 5 times:
-     ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 5
-
-     # Run Serial implicit, 5 times:
-     ./run_benchmark.sh heat_serial_implicit.cpp 1 1 5
-
-     # Run Hybrid MPI+OpenMP (2 ranks x 4 threads), 5 times:
-     ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 2 4 5
-
-2. Run full scaling benchmark sweep across all process counts:
-   ./sweep_experiments.sh 1000 1000
-
-3. Submit as batch job on Atlas (SLURM):
-   sbatch atlas_job.slurm
-
-Outputs:
-  - Summary Text File : results/<experiment>_summary.txt
-  - Master CSV File   : results/all_results.csv (ready for Excel / Pandas plotting)
-  - Raw Output Logs   : results/logs/
+To run including contiguous 2D block bonus cases:
+  RUN_CONTIGUOUS=true PROCS_LIST="1 4" ./sweep_experiments.sh 1000 100 3
 
 
+================================================================================
+5. Explicit Solver Baseline Reference (For comparison / historical reference)
+================================================================================
+Serial Explicit:
+  clang++ -O3 heat_serial.cpp -o bin/heat_serial && ./bin/heat_serial
 
+MPI 1D Row Explicit:
+  mpicxx -O3 heat_mpi.cpp -o bin/heat_mpi && mpirun -np 4 ./bin/heat_mpi
 
+MPI Non-blocking Explicit:
+  mpicxx -O3 heat_mpi_v2.cpp -o bin/heat_mpi_v2 && mpirun -np 4 ./bin/heat_mpi_v2
 
+MPI 2D Block Explicit:
+  mpicxx -O3 heat_mpi_block.cpp -o bin/heat_mpi_block && mpirun -np 4 ./bin/heat_mpi_block
+
+MPI Cache Tiled Explicit:
+  mpicxx -O3 heat_mpi_tile.cpp -o bin/heat_mpi_tile && mpirun -np 4 ./bin/heat_mpi_tile
+================================================================================
