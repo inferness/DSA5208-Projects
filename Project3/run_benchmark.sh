@@ -146,8 +146,9 @@ if [ "$NEEDS_MPI" = true ]; then
     if [ "$OS" = "Darwin" ]; then
       RUN_CMD=(mpirun --oversubscribe --bind-to none -np "$MPI_PROCS")
     else
-      # On Linux / HPC cluster, bind each MPI process to its dedicated core to prevent context switching
-      RUN_CMD=(mpirun --bind-to core -np "$MPI_PROCS")
+      # On Linux / HPC cluster, allow OpenMPI to place processes without strict core binding conflicts
+      # under PBS cgroups / cpuset allocations
+      RUN_CMD=(mpirun --bind-to none -np "$MPI_PROCS")
     fi
   elif command -v mpiexec >/dev/null 2>&1; then
     RUN_CMD=(mpiexec -n "$MPI_PROCS")
@@ -156,19 +157,13 @@ if [ "$NEEDS_MPI" = true ]; then
     RUN_CMD=()
   fi
 else
-  # Serial execution: pin to a dedicated core in the allocation to prevent NUMA migration penalty
+  # Serial execution: execute within the PBS allocation
+  # Use numactl --localalloc if available to ensure memory is allocated on local NUMA node
   if [ "$OS" = "Linux" ]; then
-    if command -v mpirun >/dev/null 2>&1; then
-      # OpenMPI automatically binds to the first valid core in the PBS allocation/cgroup
-      RUN_CMD=(mpirun --bind-to core -np 1)
-    elif command -v taskset >/dev/null 2>&1; then
-      # Find the first allowed CPU in current affinity mask (handles PBS cgroups)
-      FIRST_CORE=$(taskset -cp $$ 2>/dev/null | grep -oE '[0-9]+' | head -n 1 || true)
-      if [ -n "$FIRST_CORE" ]; then
-        RUN_CMD=(taskset -c "$FIRST_CORE")
-      fi
-    elif command -v numactl >/dev/null 2>&1; then
+    if command -v numactl >/dev/null 2>&1; then
       RUN_CMD=(numactl --localalloc)
+    elif command -v mpirun >/dev/null 2>&1; then
+      RUN_CMD=(mpirun --bind-to none -np 1)
     fi
   fi
 fi
