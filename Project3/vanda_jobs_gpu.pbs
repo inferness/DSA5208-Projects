@@ -1,0 +1,25 @@
+#!/bin/bash
+# ==============================================================================
+# PBS Pro batch job template for future Vanda GPU experiments
+# ==============================================================================
+
+#PBS -q batch_gpu
+#PBS -N heat_implicit_gpu
+#PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
+#PBS -l walltime=01:30:00
+#PBS -j oe
+#PBS -o results/vanda_gpu_pbs_job.log
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+mkdir -p results bin
+
+echo "GPU job allocated on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+
+# TODO: Load Vanda's GPU compiler/runtime modules and run the GPU benchmark
+# once the GPU implementation is available. The CPU sweep is intentionally
+# not started from the GPU queue.
+echo "No GPU implementation is available yet; allocation test completed."
