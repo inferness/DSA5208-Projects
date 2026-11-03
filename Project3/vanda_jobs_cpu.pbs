@@ -3,8 +3,9 @@
 # PBS Pro batch job script for Vanda CPU experiments
 # ==============================================================================
 
+#PBS -q batch_cpu
 #PBS -N heat_implicit_cpu
-#PBS -l select=1:ncpus=32:mpiprocs=32:mem=32gb
+#PBS -l select=4:ncpus=64:mpiprocs=64:mem=32gb
 #PBS -l walltime=01:30:00
 #PBS -j oe
 #PBS -o results/vanda_cpu_pbs_job.log
