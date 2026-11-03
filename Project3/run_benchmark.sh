@@ -142,13 +142,14 @@ if [ "$NEEDS_MPI" = true ]; then
   if command -v srun >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
     RUN_CMD=(srun -n "$MPI_PROCS")
   elif command -v mpirun >/dev/null 2>&1; then
-    # On macOS or unmanaged environments, allow oversubscribe if needed
     if [ "$OS" = "Darwin" ]; then
       RUN_CMD=(mpirun --oversubscribe --bind-to none -np "$MPI_PROCS")
     else
-      # On Linux / HPC cluster, allow OpenMPI to place processes without strict core binding conflicts
-      # under PBS cgroups / cpuset allocations
-      RUN_CMD=(mpirun --bind-to none -np "$MPI_PROCS")
+      # On Linux / HPC cluster with PBS Pro:
+      # PBS creates 1 slot per mpiproc in the cgroup. --bind-to core fails because
+      # OpenMPI sees 1 cpu per slot. Use --bind-to none and let PBS cgroup handle isolation.
+      # Add --map-by core to distribute processes across physical cores for cache locality.
+      RUN_CMD=(mpirun --bind-to none --map-by core -np "$MPI_PROCS")
     fi
   elif command -v mpiexec >/dev/null 2>&1; then
     RUN_CMD=(mpiexec -n "$MPI_PROCS")
@@ -157,13 +158,18 @@ if [ "$NEEDS_MPI" = true ]; then
     RUN_CMD=()
   fi
 else
-  # Serial execution: execute within the PBS allocation
-  # Use numactl --localalloc if available to ensure memory is allocated on local NUMA node
+  # Serial execution: pin to a single core to prevent NUMA migration penalty.
+  # mpirun --bind-to core -np 1 auto-detects the PBS cgroup and pins to the first
+  # allowed core, giving the serial code the same single-core advantage as MPI p=1.
   if [ "$OS" = "Linux" ]; then
-    if command -v numactl >/dev/null 2>&1; then
-      RUN_CMD=(numactl --localalloc)
-    elif command -v mpirun >/dev/null 2>&1; then
-      RUN_CMD=(mpirun --bind-to none -np 1)
+    if command -v mpirun >/dev/null 2>&1; then
+      # Use mpirun with 1 process bound to a core — this respects PBS cgroups
+      # and pins the serial process to prevent thread migration across NUMA dies.
+      RUN_CMD=(mpirun -np 1 --bind-to core)
+    elif command -v numactl >/dev/null 2>&1; then
+      # Fallback: pin to first core in the cpuset
+      FIRST_CORE=$(cat /sys/fs/cgroup/cpuset/cpuset.cpus 2>/dev/null | cut -d- -f1 | cut -d, -f1 || echo "0")
+      RUN_CMD=(numactl --physcpubind="$FIRST_CORE" --localalloc)
     fi
   fi
 fi
