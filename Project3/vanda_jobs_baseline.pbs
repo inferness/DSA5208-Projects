@@ -54,6 +54,7 @@ chmod +x ./run_benchmark.sh
   mpicxx --showme:compile 2>&1 || true
   echo "MPI link flags:"
   mpicxx --showme:link 2>&1 || true
+  echo "Kernel reduction hint: likely-false branch for new max updates"
 } | tee results/toolchain.txt
 
 export ENABLE_EXTERNAL_WALL_TIME=true
@@ -74,7 +75,7 @@ for ((pair = 1; pair <= RUNS; pair++)); do
   echo "Paired benchmark $pair / $RUNS at $(date)"
 
   export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial.txt"
-  export EXPERIMENT_ID="heat_serial_pair${pair}"
+  export EXPERIMENT_ID="heat_serial_branchhint_pair${pair}"
   ./run_benchmark.sh heat_serial_implicit.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then
@@ -85,7 +86,7 @@ for ((pair = 1; pair <= RUNS; pair++)); do
   fi
 
   export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_implicit_p1.txt"
-  export EXPERIMENT_ID="heat_mpi_implicit_p1_pair${pair}"
+  export EXPERIMENT_ID="heat_mpi_implicit_p1_branchhint_pair${pair}"
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then

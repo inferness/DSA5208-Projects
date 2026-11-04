@@ -2,6 +2,12 @@
 
 #include <cmath>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define HEAT_UNLIKELY(condition) __builtin_expect(!!(condition), 0)
+#else
+#define HEAT_UNLIKELY(condition) (condition)
+#endif
+
 double heat_jacobi_update(const double* u_prev, const double* u_curr,
                           double* u_next, std::size_t gridWidth,
                           int ownedRows, int firstGlobalRow,
@@ -30,7 +36,7 @@ double heat_jacobi_update(const double* u_prev, const double* u_curr,
       u_next[row + col] = newVal;
 
       const double diff = std::abs(newVal - u_curr[row + col]);
-      if (diff > maxDiff) {
+      if (HEAT_UNLIKELY(diff > maxDiff)) {
         maxDiff = diff;
       }
     }
@@ -38,3 +44,5 @@ double heat_jacobi_update(const double* u_prev, const double* u_curr,
 
   return maxDiff;
 }
+
+#undef HEAT_UNLIKELY
