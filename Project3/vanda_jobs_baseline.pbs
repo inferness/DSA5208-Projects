@@ -1,0 +1,50 @@
+#!/bin/bash
+# ==============================================================================
+# PBS Pro focused baseline job for Vanda
+# ==============================================================================
+# Compares the serial implementation with one MPI rank using one CPU core.
+
+#PBS -q batch_cpu
+#PBS -N heat_baseline_compare
+#PBS -l select=1:ncpus=1:mpiprocs=1:mem=32gb
+#PBS -l walltime=01:30:00
+#PBS -j oe
+# PBS opens this file before the script runs, so keep it outside results/.
+#PBS -o vanda_baseline_pbs_job.log
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+mkdir -p results/vectorization bin
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+fi
+
+if ! command -v mpicxx >/dev/null 2>&1; then
+  echo "ERROR: mpicxx is not available. Load Vanda's compiler/MPI modules first."
+  exit 1
+fi
+
+export OMPI_MCA_mpi_yield_when_idle=1
+export PRTE_MCA_mpi_yield_when_idle=1
+export RUN_CONTIGUOUS=false
+
+chmod +x ./run_benchmark.sh
+
+echo "Job started on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+
+export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial.txt"
+./run_benchmark.sh heat_serial_implicit.cpp 1 1 5 3000 1000
+
+export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_implicit_p1.txt"
+./run_benchmark.sh heat_mpi_implicit.cpp 1 1 5 3000 1000
+
+export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_nonblocking_p1.txt"
+./run_benchmark.sh heat_mpi_nonblocking_implicit.cpp 1 1 5 3000 1000
+
+echo "Job finished at: $(date)"
+echo "Results: $(pwd)/results/"

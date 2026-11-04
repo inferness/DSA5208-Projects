@@ -117,7 +117,7 @@ if [ -z "${CXX:-}" ]; then
   fi
 fi
 
-CXXFLAGS="-O3 -std=c++17"
+CXXFLAGS="${CXXFLAGS:--O3 -std=c++17}"
 
 if [ "$NEEDS_OMP" = true ]; then
   if [ "$OS" = "Darwin" ]; then
