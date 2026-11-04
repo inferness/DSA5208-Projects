@@ -109,7 +109,38 @@ Custom parameters: mpiexec -n 4 .\heat_mpi_implicit.exe [N] [STEPS] [LAMBDA] [MA
   PowerShell:   mpiexec -n 4 .\heat_mpi_implicit.exe 500 100
 
 
-8. MPI Version - Implicit Jacobi 2D Block (heat_mpi_block_implicit.cpp)
+8. Focused Serial vs MPI 1-Rank Baseline Comparison
+-----------------------------------------------------
+Use the same compiler, optimization flags, and input parameters for both
+programs. This is the Windows equivalent of the Vanda troubleshooting job.
+
+Compile:
+  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp -o heat_serial_implicit.exe
+  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o heat_mpi_implicit.exe
+
+Run one controlled comparison (N=3000, STEPS=1000):
+  PowerShell:
+    .\heat_serial_implicit.exe 3000 1000
+    mpiexec -n 1 .\heat_mpi_implicit.exe 3000 1000
+
+CMD / MSYS2 Bash:
+  heat_serial_implicit.exe 3000 1000
+  mpiexec -n 1 heat_mpi_implicit.exe 3000 1000
+
+Repeat the comparison five times manually and compare the reported
+"Execution time" values. Check that both programs report:
+  Total Jacobi iters   : 3943
+  Non-converged steps  : 0 / 1000
+
+Optional: repeat with compiler vectorization disabled:
+  PowerShell:
+    mpicxx -O3 -std=c++17 -fno-tree-vectorize heat_serial_implicit.cpp -o heat_serial_implicit_novec.exe
+    mpicxx -O3 -std=c++17 -fno-tree-vectorize heat_mpi_implicit.cpp -o heat_mpi_implicit_novec.exe
+    .\heat_serial_implicit_novec.exe 3000 1000
+    mpiexec -n 1 .\heat_mpi_implicit_novec.exe 3000 1000
+
+
+9. MPI Version - Implicit Jacobi 2D Block (heat_mpi_block_implicit.cpp)
 ----------------------------------------
 Compile:
   mpicxx -O3 heat_mpi_block_implicit.cpp -o heat_mpi_block_implicit.exe
@@ -123,7 +154,7 @@ Custom parameters: mpiexec -n 4 .\heat_mpi_block_implicit.exe [N] [STEPS] [LAMBD
   PowerShell:   mpiexec -n 4 .\heat_mpi_block_implicit.exe 500 100
 
 
-9. Hybrid MPI + OpenMP - Implicit Jacobi (heat_mpi_openMP_implicit.cpp)
+10. Hybrid MPI + OpenMP - Implicit Jacobi (heat_mpi_openMP_implicit.cpp)
 ----------------------------------------
 Compile:
   mpicxx -O3 -fopenmp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit.exe
@@ -276,6 +307,4 @@ Run (example: 2 MPI processes, each with 4 OpenMP threads = 8 workers total):
 
   CMD / Bash:
     set OMP_NUM_THREADS=4 && mpiexec -n 2 NBody_mpi_openMP.exe
-
-
 
