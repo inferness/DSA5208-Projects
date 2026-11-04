@@ -47,6 +47,12 @@ BASE_NAME="$(basename "$SOURCE_FILE" .cpp)"
 BINARY="./bin/${BASE_NAME}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 EXP_ID="${EXPERIMENT_ID:-${BASE_NAME}_p${MPI_PROCS}_t${OMP_THREADS}}"
+COMPILE_SOURCES=("$SOURCE_FILE")
+case "$BASE_NAME" in
+  heat_serial_implicit|heat_mpi_implicit)
+    COMPILE_SOURCES+=(heat_jacobi_kernel.cpp)
+    ;;
+esac
 
 RESULTS_DIR="./results"
 LOGS_DIR="${RESULTS_DIR}/logs"
@@ -135,8 +141,8 @@ if [ "$NEEDS_OMP" = true ]; then
 fi
 
 # 3. Compile
-echo "[1/3] Compiling: $CXX $CXXFLAGS $SOURCE_FILE -o $BINARY"
-$CXX $CXXFLAGS "$SOURCE_FILE" -o "$BINARY"
+echo "[1/3] Compiling: $CXX $CXXFLAGS ${COMPILE_SOURCES[*]} -o $BINARY"
+$CXX $CXXFLAGS "${COMPILE_SOURCES[@]}" -o "$BINARY"
 echo "      Compilation successful."
 echo "----------------------------------------------------------"
 

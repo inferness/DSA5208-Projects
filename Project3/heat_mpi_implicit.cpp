@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "heat_jacobi_kernel.h"
+
 using namespace std;
 
 // Convert local row (with halos) and global col to 1D flat index
@@ -139,35 +141,10 @@ int main(int argc, char *argv[]) {
       local_comm_time += (MPI_Wtime() - t_comm0);
 
       double t_comp0 = MPI_Wtime();
-      double localMaxDiff = 0.0;
-
       // Update owned interior cells using Jacobi relaxation
-      for (int i = 1; i <= localRows; i++) {
-        int globalRow = startRow + i - 1;
-
-        // Keep physical top and bottom boundaries fixed at 0.0
-        if (globalRow == 0 || globalRow == N - 1)
-          continue;
-
-        const size_t rowOffset = i * N;
-        const size_t upOffset = (i - 1) * N;
-        const size_t downOffset = (i + 1) * N;
-
-        for (int j = 1; j < N - 1; j++) {
-          double neighborsSum = u_curr[upOffset + j] + u_curr[downOffset + j] +
-                                u_curr[rowOffset + j - 1] +
-                                u_curr[rowOffset + j + 1];
-
-          double newVal =
-              (u_prev[rowOffset + j] + LAMBDA * neighborsSum) * invDiag;
-          u_next[rowOffset + j] = newVal;
-
-          double diff = std::abs(newVal - u_curr[rowOffset + j]);
-          if (diff > localMaxDiff) {
-            localMaxDiff = diff;
-          }
-        }
-      }
+      const double localMaxDiff = heat_jacobi_update(
+          u_prev.data(), u_curr.data(), u_next.data(), static_cast<size_t>(N),
+          localRows, startRow, 1, LAMBDA, invDiag);
 
       // Prepare for next Jacobi iteration
       u_curr.swap(u_next);
