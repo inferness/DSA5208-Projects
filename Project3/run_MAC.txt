@@ -29,17 +29,21 @@ All implicit implementations take the same optional command-line arguments:
   - Medium test parameters: N=1000 STEPS=200 (runs in ~1-2 seconds)
 
 --------------------------------------------------------------------------------
-1.1 Configuration 1: Serial Baseline (heat_serial_implicit.cpp)
+1.1 Configuration 1: Optimized Serial Baseline (heat_serial_implicit_optimized.cpp)
 --------------------------------------------------------------------------------
 Compile:
-  clang++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
-  (or: g++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit)
+  clang++ -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o bin/heat_serial_implicit_optimized
+  (or: g++ -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o bin/heat_serial_implicit_optimized)
 
 Run (default N=3000, STEPS=1000):
-  ./bin/heat_serial_implicit
+  ./bin/heat_serial_implicit_optimized
 
 Quick Test:
-  ./bin/heat_serial_implicit 500 100
+  ./bin/heat_serial_implicit_optimized 500 100
+
+Unoptimized reference (original per-cell convergence maximum):
+  clang++ -O3 -std=c++17 heat_serial_implicit_unoptimized.cpp -o bin/heat_serial_implicit_unoptimized
+  ./bin/heat_serial_implicit_unoptimized 500 100
 
 --------------------------------------------------------------------------------
 1.2 Configuration 2: 1D Row Decomposition - Blocking (heat_mpi_implicit.cpp)
@@ -133,11 +137,11 @@ To investigate whether serial runs slower than MPI on a single core, you can run
 them side-by-side using the same test parameters:
 
 Step 1: Compile both binaries with the same compiler & flags:
-  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
+  mpicxx -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o bin/heat_serial_implicit_optimized
   mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o bin/heat_mpi_implicit
 
 Step 2: Run serial (1 core):
-  ./bin/heat_serial_implicit 1000 200
+  ./bin/heat_serial_implicit_optimized 1000 200
 
 Step 3: Run MPI with 1 process (1 core):
   mpirun -np 1 ./bin/heat_mpi_implicit 1000 200
@@ -164,7 +168,7 @@ Syntax:
 
 Examples:
   # 1. Benchmark serial implicit (5 runs, default size):
-  ./run_benchmark.sh heat_serial_implicit.cpp 1 1 5
+  ./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 5
 
   # 2. Benchmark MPI 1D implicit with 1 process (to compare with serial):
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 5
@@ -173,7 +177,7 @@ Examples:
   ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 5
 
   # 4. Fast benchmark with smaller problem size (N=1000, STEPS=200):
-  ./run_benchmark.sh heat_serial_implicit.cpp 1 1 3 1000 200
+  ./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 3 1000 200
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 3 1000 200
   ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 3 1000 200
 

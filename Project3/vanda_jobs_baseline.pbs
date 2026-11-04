@@ -54,7 +54,7 @@ chmod +x ./run_benchmark.sh
   mpicxx --showme:compile 2>&1 || true
   echo "MPI link flags:"
   mpicxx --showme:link 2>&1 || true
-  echo "Serial reduction variant: per-row max, MPI source unchanged"
+  echo "Serial variants: original per-cell max and optimized per-row max; optimized serial is the efficiency baseline"
 } | tee results/toolchain.txt
 
 export ENABLE_EXTERNAL_WALL_TIME=true
@@ -74,19 +74,30 @@ for ((pair = 1; pair <= RUNS; pair++)); do
   echo "=========================================================="
   echo "Paired benchmark $pair / $RUNS at $(date)"
 
-  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial.txt"
-  export EXPERIMENT_ID="heat_serial_rowmax_pair${pair}"
-  ./run_benchmark.sh heat_serial_implicit.cpp 1 1 1 3000 1000
+  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial_unoptimized.txt"
+  export EXPERIMENT_ID="heat_serial_unoptimized_pair${pair}"
+  ./run_benchmark.sh heat_serial_implicit_unoptimized.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then
-      objdump -d -C ./bin/heat_serial_implicit > results/disassembly/heat_serial_implicit.asm
+      objdump -d -C ./bin/heat_serial_implicit_unoptimized > results/disassembly/heat_serial_implicit_unoptimized.asm
     else
-      echo "objdump unavailable; serial disassembly not captured." | tee -a results/toolchain.txt
+      echo "objdump unavailable; unoptimized serial disassembly not captured." | tee -a results/toolchain.txt
+    fi
+  fi
+
+  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial_optimized.txt"
+  export EXPERIMENT_ID="heat_serial_optimized_pair${pair}"
+  ./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 1 3000 1000
+  if [ "$pair" -eq 1 ]; then
+    if command -v objdump >/dev/null 2>&1; then
+      objdump -d -C ./bin/heat_serial_implicit_optimized > results/disassembly/heat_serial_implicit_optimized.asm
+    else
+      echo "objdump unavailable; optimized serial disassembly not captured." | tee -a results/toolchain.txt
     fi
   fi
 
   export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_implicit_p1.txt"
-  export EXPERIMENT_ID="heat_mpi_implicit_p1_rowmax_pair${pair}"
+  export EXPERIMENT_ID="heat_mpi_implicit_p1_optimized_baseline_pair${pair}"
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then

@@ -24,4 +24,4 @@ echo " CPU Model: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
 echo "=========================================================="
 
 # Run serial code 1 time (with core pinning):
-./run_benchmark.sh heat_serial_implicit.cpp 1 1 1 3000 1000
+./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 1 3000 1000

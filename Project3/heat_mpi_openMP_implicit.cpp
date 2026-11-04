@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     MPI_Abort(MPI_COMM_WORLD, 1);
   }
 
-  // Default parameters matching heat_serial_implicit.cpp
+  // Default parameters matching heat_serial_implicit_optimized.cpp
   int N = 3000;
   int STEPS = 1000;
   // Discretization parameters:

@@ -2,12 +2,13 @@
 # ==============================================================================
 # Automated Scaling Experiment Sweeper (for Atlas HPC & Local Benchmarking)
 # ==============================================================================
-# Benchmarks all 5 configurations of the 2D Heat Equation Implicit Solver:
-#   1. Serial Baseline (heat_serial_implicit.cpp)
-#   2. 1D Row Decomposition + Blocking Communication (heat_mpi_implicit.cpp)
-#   3. 1D Row Decomposition + Non-blocking Overlap (heat_mpi_nonblocking_implicit.cpp)
-#   4. 2D Block Decomposition + Blocking Communication (heat_mpi_block_implicit.cpp)
-#   5. 2D Block Decomposition + Non-blocking Overlap (heat_mpi_block_nonblocking_implicit.cpp)
+# Benchmarks both serial variants and the MPI configurations of the 2D Heat Equation:
+#   1. Original unoptimized serial reference
+#   2. Optimized serial baseline (used for MPI speedup and efficiency)
+#   3. 1D Row Decomposition + Blocking Communication (heat_mpi_implicit.cpp)
+#   4. 1D Row Decomposition + Non-blocking Overlap (heat_mpi_nonblocking_implicit.cpp)
+#   5. 2D Block Decomposition + Blocking Communication (heat_mpi_block_implicit.cpp)
+#   6. 2D Block Decomposition + Non-blocking Overlap (heat_mpi_block_nonblocking_implicit.cpp)
 #   [Bonus: Hybrid MPI + OpenMP (heat_mpi_openMP_implicit.cpp)]
 #
 # All execution times, speedups, and statistics (Mean, Min, Max, StdDev) are
@@ -23,7 +24,7 @@ RUNS="${3:-5}"
 
 # Target process counts for the requested scaling study.
 # PBS filters this list against the allocated MPI slots below.
-DEFAULT_PROCS="2 8 64 128 256"
+DEFAULT_PROCS="1 2 4 8 16 32"
 
 if [ -n "${PBS_NODEFILE:-}" ] && [ -z "${PROCS_LIST:-}" ]; then
   TOTAL_SLOTS=$(wc -l < "$PBS_NODEFILE")
@@ -45,30 +46,34 @@ echo " Problem Size: N=$N, STEPS=$STEPS, Repetitions=$RUNS"
 echo " Process Counts to Sweep: $PROCS_LIST"
 echo "=========================================================="
 
-# 1. Serial Implicit Baseline
-echo -e "\n>>> [1/5] Benchmarking Configuration 1: Serial Baseline..."
-./run_benchmark.sh heat_serial_implicit.cpp 1 1 "$RUNS" "$N" "$STEPS"
+# 1. Original unoptimized serial reference. This does not set the efficiency baseline.
+echo -e "\n>>> [1/6] Benchmarking Configuration 1: Unoptimized Serial Reference..."
+./run_benchmark.sh heat_serial_implicit_unoptimized.cpp 1 1 "$RUNS" "$N" "$STEPS"
 
-# 2. MPI 1D Row Decomposition + Blocking Communication
-echo -e "\n>>> [2/5] Benchmarking Configuration 2: 1D Row Decomposition (Blocking)..."
+# 2. Optimized serial baseline. MPI speedup and efficiency use this timing.
+echo -e "\n>>> [2/6] Benchmarking Configuration 2: Optimized Serial Baseline..."
+./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 "$RUNS" "$N" "$STEPS"
+
+# 3. MPI 1D Row Decomposition + Blocking Communication
+echo -e "\n>>> [3/6] Benchmarking Configuration 3: 1D Row Decomposition (Blocking)..."
 for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done
 
-# 3. MPI 1D Row Decomposition + Non-blocking Communication
-echo -e "\n>>> [3/5] Benchmarking Configuration 3: 1D Row Decomposition (Non-blocking Overlap)..."
+# 4. MPI 1D Row Decomposition + Non-blocking Communication
+echo -e "\n>>> [4/6] Benchmarking Configuration 4: 1D Row Decomposition (Non-blocking Overlap)..."
 for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done
 
-# 4. MPI 2D Block Decomposition + Blocking Communication
-echo -e "\n>>> [4/5] Benchmarking Configuration 4: 2D Block Decomposition (Blocking)..."
+# 5. MPI 2D Block Decomposition + Blocking Communication
+echo -e "\n>>> [5/6] Benchmarking Configuration 5: 2D Block Decomposition (Blocking)..."
 for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done
 
-# 5. MPI 2D Block Decomposition + Non-blocking Communication
-echo -e "\n>>> [5/5] Benchmarking Configuration 5: 2D Block Decomposition (Non-blocking Overlap)..."
+# 6. MPI 2D Block Decomposition + Non-blocking Communication
+echo -e "\n>>> [6/6] Benchmarking Configuration 6: 2D Block Decomposition (Non-blocking Overlap)..."
 for p in $PROCS_LIST; do
   ./run_benchmark.sh heat_mpi_block_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
 done

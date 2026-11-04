@@ -25,18 +25,22 @@ Run:
   CMD / Bash:   heat_serial.exe
 
 
-1b. Serial Version - Implicit (heat_serial_implicit.cpp)
+1b. Optimized Serial Version - Implicit (heat_serial_implicit_optimized.cpp)
 ----------------------------------------
 Compile:
-  g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit.exe
+  g++ -O3 heat_serial_implicit_optimized.cpp -o heat_serial_implicit_optimized.exe
 
 Run (default: N=3000, STEPS=1000):
-  PowerShell:   .\heat_serial_implicit.exe
-  CMD / Bash:   heat_serial_implicit.exe
+  PowerShell:   .\heat_serial_implicit_optimized.exe
+  CMD / Bash:   heat_serial_implicit_optimized.exe
 
-Custom parameters: ./heat_serial_implicit.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
+Custom parameters: ./heat_serial_implicit_optimized.exe [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
   Example (N=500, STEPS=100):
-  PowerShell:   .\heat_serial_implicit.exe 500 100
+  PowerShell:   .\heat_serial_implicit_optimized.exe 500 100
+
+Unoptimized reference (original per-cell convergence maximum):
+  g++ -O3 heat_serial_implicit_unoptimized.cpp -o heat_serial_implicit_unoptimized.exe
+  .\heat_serial_implicit_unoptimized.exe 500 100
 
 
 
@@ -115,16 +119,16 @@ Use the same compiler, optimization flags, and input parameters for both
 programs. This is the Windows equivalent of the Vanda troubleshooting job.
 
 Compile:
-  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp -o heat_serial_implicit.exe
+  mpicxx -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o heat_serial_implicit_optimized.exe
   mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o heat_mpi_implicit.exe
 
 Run one controlled comparison (N=3000, STEPS=1000):
   PowerShell:
-    .\heat_serial_implicit.exe 3000 1000
+    .\heat_serial_implicit_optimized.exe 3000 1000
     mpiexec -n 1 .\heat_mpi_implicit.exe 3000 1000
 
 CMD / MSYS2 Bash:
-  heat_serial_implicit.exe 3000 1000
+  heat_serial_implicit_optimized.exe 3000 1000
   mpiexec -n 1 heat_mpi_implicit.exe 3000 1000
 
 Repeat the comparison five times manually and compare the reported
@@ -134,9 +138,9 @@ Repeat the comparison five times manually and compare the reported
 
 Optional: repeat with compiler vectorization disabled:
   PowerShell:
-    mpicxx -O3 -std=c++17 -fno-tree-vectorize heat_serial_implicit.cpp -o heat_serial_implicit_novec.exe
+    mpicxx -O3 -std=c++17 -fno-tree-vectorize heat_serial_implicit_optimized.cpp -o heat_serial_implicit_optimized_novec.exe
     mpicxx -O3 -std=c++17 -fno-tree-vectorize heat_mpi_implicit.cpp -o heat_mpi_implicit_novec.exe
-    .\heat_serial_implicit_novec.exe 3000 1000
+    .\heat_serial_implicit_optimized_novec.exe 3000 1000
     mpiexec -n 1 .\heat_mpi_implicit_novec.exe 3000 1000
 
 
@@ -180,7 +184,7 @@ Quick One-Liners (Compile & Run)
 g++ -O3 heat_serial.cpp -o heat_serial.exe; .\heat_serial.exe
 
 # Serial (Implicit):
-g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit.exe; .\heat_serial_implicit.exe
+g++ -O3 heat_serial_implicit_optimized.cpp -o heat_serial_implicit_optimized.exe; .\heat_serial_implicit_optimized.exe
 
 # MPI v1 (1D Row):
 mpicxx -O3 heat_mpi.cpp -o heat_mpi.exe; mpiexec -n 4 .\heat_mpi.exe
@@ -212,7 +216,7 @@ mpicxx -O3 -fopenmp heat_mpi_openMP_implicit.cpp -o heat_mpi_openMP_implicit.exe
 g++ -O3 heat_serial.cpp -o heat_serial.exe && heat_serial.exe
 
 # Serial (Implicit):
-g++ -O3 heat_serial_implicit.cpp -o heat_serial_implicit.exe && heat_serial_implicit.exe
+g++ -O3 heat_serial_implicit_optimized.cpp -o heat_serial_implicit_optimized.exe && heat_serial_implicit_optimized.exe
 
 # MPI v1 (1D Row):
 mpicxx -O3 heat_mpi.cpp -o heat_mpi.exe && mpiexec -n 4 heat_mpi.exe

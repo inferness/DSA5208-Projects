@@ -15,7 +15,7 @@
 #
 # Examples:
 #   # Run serial implicit 5 times:
-#   ./run_benchmark.sh heat_serial_implicit.cpp 1 1 5
+#   ./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 5
 #
 #   # Run MPI implicit with 4 processes, 5 times:
 #   ./run_benchmark.sh heat_mpi_implicit.cpp 4 1 5
@@ -309,14 +309,18 @@ if [ ${#COMM_TIMES[@]} -gt 0 ]; then
 fi
 
 # Track serial baseline time to compute Speedup and Parallel Efficiency
-SERIAL_TIME_FILE="${RESULTS_DIR}/serial_baseline_time.txt"
+SERIAL_TIME_FILE="${RESULTS_DIR}/optimized_serial_baseline_time.txt"
 SPEEDUP=""
 EFFICIENCY=""
 
-if [[ "$SOURCE_FILE" == *"serial"* ]]; then
+SOURCE_BASENAME="$(basename "$SOURCE_FILE")"
+if [[ "$SOURCE_BASENAME" == "heat_serial_implicit_optimized.cpp" ]]; then
   echo "$MEAN_TIME" > "$SERIAL_TIME_FILE"
   SPEEDUP="1.00"
   EFFICIENCY="100.00%"
+elif [[ "$SOURCE_BASENAME" == "heat_serial_implicit_unoptimized.cpp" ]]; then
+  # Keep the unoptimized timing for comparison without replacing the optimized baseline.
+  :
 elif [ -f "$SERIAL_TIME_FILE" ]; then
   SERIAL_TIME=$(cat "$SERIAL_TIME_FILE" | tr -d '[:space:]')
   if [ -n "$SERIAL_TIME" ]; then

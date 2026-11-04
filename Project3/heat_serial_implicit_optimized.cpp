@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+// Optimized serial variant: reduce convergence differences once per row.
+
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -40,7 +42,7 @@ int main(int argc, char* argv[]) {
   double TOL = 1e-5;           // Convergence tolerance for Jacobi solver
 
   // Optional command-line arguments:
-  // ./heat_serial_implicit [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
+  // ./heat_serial_implicit_optimized [N] [STEPS] [LAMBDA] [MAX_JACOBI_ITERS] [TOL]
   if (argc >= 2) N = atoi(argv[1]);
   if (argc >= 3) STEPS = atoi(argv[2]);
   if (argc >= 4) LAMBDA = atof(argv[3]);
