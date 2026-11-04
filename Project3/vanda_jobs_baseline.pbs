@@ -4,7 +4,6 @@
 # ==============================================================================
 # Compares the serial implementation with one MPI rank using one CPU core.
 
-#PBS -q batch_cpu
 #PBS -N heat_baseline_compare
 #PBS -l select=1:ncpus=1:mpiprocs=1:mem=32gb
 #PBS -l walltime=01:30:00
