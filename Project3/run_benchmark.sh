@@ -46,7 +46,7 @@ fi
 BASE_NAME="$(basename "$SOURCE_FILE" .cpp)"
 BINARY="./bin/${BASE_NAME}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
-EXP_ID="${BASE_NAME}_p${MPI_PROCS}_t${OMP_THREADS}"
+EXP_ID="${EXPERIMENT_ID:-${BASE_NAME}_p${MPI_PROCS}_t${OMP_THREADS}}"
 
 RESULTS_DIR="./results"
 LOGS_DIR="${RESULTS_DIR}/logs"

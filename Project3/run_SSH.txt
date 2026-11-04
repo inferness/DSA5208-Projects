@@ -1,5 +1,5 @@
 ================================================================================
-                    NUS Atlas HPC & SSH Command Reference
+                    NUS Vanda HPC & SSH Command Reference
 ================================================================================
 Important: Make sure you are connected to the NUS VPN (Pulse Secure / Ivanti)
 before running any of these commands from your local Mac.
@@ -21,16 +21,15 @@ Force password authentication (skip local SSH key attempts):
 
 
 --------------------------------------------------------------------------------
-2. Download Results to Local Mac (Run from Mac Terminal, NOT on Atlas)
+2. Download Results to Local Mac (Run from Mac Terminal, NOT on Vanda)
 --------------------------------------------------------------------------------
 Option A (Absolute full path):
-  scp -r "cornelius-axel.tjandra@atlas9.nus.edu.sg:~/DSA5208-Projects/Project3/results" "/Users/corneliusaxeltjandra/Documents/Distributed DB/Project3/"
+  mkdir -p "/Users/corneliusaxeltjandra/Documents/Distributed DB/Project3/baseline_troubleshooting"
+  scp -r "cornelius-axel.tjandra@vanda.nus.edu.sg:~/DSA5208-Projects/Project3/results" "/Users/corneliusaxeltjandra/Documents/Distributed DB/Project3/baseline_troubleshooting/"
 
 Option B (If your Mac terminal is already inside the Project3 directory):
-  scp -r "cornelius-axel.tjandra@atlas9.nus.edu.sg:~/DSA5208-Projects/Project3/results" .
-
-Alternative via Atlas8:
-  scp -r "cornelius-axel.tjandra@atlas8.nus.edu.sg:~/DSA5208-Projects/Project3/results" .
+  mkdir -p baseline_troubleshooting
+  scp -r "cornelius-axel.tjandra@vanda.nus.edu.sg:~/DSA5208-Projects/Project3/results" baseline_troubleshooting/
 
 
 --------------------------------------------------------------------------------
