@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "heat_jacobi_kernel.h"
-
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -122,10 +120,35 @@ int main(int argc, char* argv[]) {
     int iter = 0;
 
     for (; iter < MAX_JACOBI_ITERS; iter++) {
+      double maxDiff = 0.0;
+
       // Update interior cells using Jacobi relaxation
-      const double maxDiff = heat_jacobi_update(
-          u_prev.data(), u_curr.data(), u_next.data(), static_cast<size_t>(N),
-          N, 0, 0, LAMBDA, invDiag);
+      for (int i = firstInteriorRow; i <= lastInteriorRow; i++) {
+        const size_t rowOffset = i * N;
+        const size_t upOffset = (i - 1) * N;
+        const size_t downOffset = (i + 1) * N;
+        double rowMaxDiff = 0.0;
+
+        for (int j = firstInteriorCol; j <= lastInteriorCol; j++) {
+          double neighborsSum = u_curr[upOffset + j] +
+                                u_curr[downOffset + j] +
+                                u_curr[rowOffset + j - 1] +
+                                u_curr[rowOffset + j + 1];
+
+          double newVal =
+              (u_prev[rowOffset + j] + LAMBDA * neighborsSum) * invDiag;
+          u_next[rowOffset + j] = newVal;
+
+          double diff = std::abs(newVal - u_curr[rowOffset + j]);
+          if (diff > rowMaxDiff) {
+            rowMaxDiff = diff;
+          }
+        }
+
+        if (rowMaxDiff > maxDiff) {
+          maxDiff = rowMaxDiff;
+        }
+      }
 
       // Prepare for next Jacobi iteration
       u_curr.swap(u_next);

@@ -32,8 +32,8 @@ All implicit implementations take the same optional command-line arguments:
 1.1 Configuration 1: Serial Baseline (heat_serial_implicit.cpp)
 --------------------------------------------------------------------------------
 Compile:
-  clang++ -O3 -std=c++17 heat_serial_implicit.cpp heat_jacobi_kernel.cpp -o bin/heat_serial_implicit
-  (or: g++ -O3 -std=c++17 heat_serial_implicit.cpp heat_jacobi_kernel.cpp -o bin/heat_serial_implicit)
+  clang++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
+  (or: g++ -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit)
 
 Run (default N=3000, STEPS=1000):
   ./bin/heat_serial_implicit
@@ -45,7 +45,7 @@ Quick Test:
 1.2 Configuration 2: 1D Row Decomposition - Blocking (heat_mpi_implicit.cpp)
 --------------------------------------------------------------------------------
 Compile:
-  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp heat_jacobi_kernel.cpp -o bin/heat_mpi_implicit
+  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o bin/heat_mpi_implicit
 
 Run (example: 1 process vs 4 processes):
   # Single process (for 1-core baseline comparison):
@@ -133,8 +133,8 @@ To investigate whether serial runs slower than MPI on a single core, you can run
 them side-by-side using the same test parameters:
 
 Step 1: Compile both binaries with the same compiler & flags:
-  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp heat_jacobi_kernel.cpp -o bin/heat_serial_implicit
-  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp heat_jacobi_kernel.cpp -o bin/heat_mpi_implicit
+  mpicxx -O3 -std=c++17 heat_serial_implicit.cpp -o bin/heat_serial_implicit
+  mpicxx -O3 -std=c++17 heat_mpi_implicit.cpp -o bin/heat_mpi_implicit
 
 Step 2: Run serial (1 core):
   ./bin/heat_serial_implicit 1000 200
