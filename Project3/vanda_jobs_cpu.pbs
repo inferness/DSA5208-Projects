@@ -7,7 +7,8 @@
 #PBS -l select=4:ncpus=64:mpiprocs=64:mem=32gb
 #PBS -l walltime=01:30:00
 #PBS -j oe
-#PBS -o results/vanda_cpu_pbs_job.log
+# Keep the PBS wrapper log outside results; PBS opens it before the script runs.
+#PBS -o vanda_cpu_pbs_job.log
 
 set -euo pipefail
 
