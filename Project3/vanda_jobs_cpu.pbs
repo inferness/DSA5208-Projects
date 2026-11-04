@@ -7,12 +7,13 @@
 #PBS -l select=4:ncpus=64:mpiprocs=64:mem=32gb
 #PBS -l walltime=01:30:00
 #PBS -j oe
-# Keep the PBS wrapper log outside results; PBS opens it before the script runs.
-#PBS -o vanda_cpu_pbs_job.log
+# Let PBS create a unique job output file (heat_implicit_cpu.o<job-number>).
 
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
+# These jobs share results/ and bin/, so run only one from this project directory at a time.
+rm -rf -- results bin
 mkdir -p results bin
 
 if command -v module >/dev/null 2>&1; then

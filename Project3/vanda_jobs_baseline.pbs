@@ -8,12 +8,13 @@
 #PBS -l select=1:ncpus=1:mpiprocs=1:mem=32gb
 #PBS -l walltime=01:30:00
 #PBS -j oe
-# PBS opens this file before the script runs, so keep it outside results/.
-#PBS -o vanda_baseline_pbs_job.log
+# Let PBS create a unique job output file (heat_baseline_compare.o<job-number>).
 
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
+# These jobs share results/ and bin/, so run only one from this project directory at a time.
+rm -rf -- results bin
 mkdir -p results/vectorization bin
 
 if command -v module >/dev/null 2>&1; then
@@ -34,10 +35,22 @@ chmod +x ./run_benchmark.sh
 echo "Job started on: $(hostname) at $(date)"
 echo "PBS job ID: ${PBS_JOBID:-N/A}"
 echo "Working directory: $(pwd)"
+echo "Host/kernel:"
+uname -a
+echo "Loaded modules:"
+module list 2>&1 || true
 echo "MPI wrapper command:"
 mpicxx --showme:command 2>/dev/null || mpicxx -show
-echo "MPI wrapper version:"
+echo "Compiler version (via MPI wrapper):"
 mpicxx --version
+echo "MPI launcher version:"
+mpirun --version
+echo "Open MPI library version:"
+ompi_info --version 2>&1 || true
+echo "MPI compile flags:"
+mpicxx --showme:compile 2>&1 || true
+echo "MPI link flags:"
+mpicxx --showme:link 2>&1 || true
 
 RUNS="${BASELINE_PAIRS:-5}"
 for ((pair = 1; pair <= RUNS; pair++)); do

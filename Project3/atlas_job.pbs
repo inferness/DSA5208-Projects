@@ -17,12 +17,14 @@
 #
 # Join standard output and standard error into a single log file:
 #PBS -j oe
-#PBS -o results/pbs_job.log
+# PBS creates a unique heat_implicit_sweep.o<job-number> file outside results/.
 
 # Change to the directory from which the job was submitted:
 cd "$PBS_O_WORKDIR"
 
-# Ensure results directory exists
+# Start this batch job with clean generated outputs.
+# These jobs share results/ and bin/, so run only one from this project directory at a time.
+rm -rf -- results bin
 mkdir -p results bin
 
 # Load required cluster modules (Atlas environment):
