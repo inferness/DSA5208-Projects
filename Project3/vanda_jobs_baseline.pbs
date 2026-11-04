@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$PBS_O_WORKDIR"
 # These jobs share results/ and bin/, so run only one from this project directory at a time.
 rm -rf -- results bin
-mkdir -p results/vectorization bin
+mkdir -p results/vectorization results/disassembly bin
 
 if command -v module >/dev/null 2>&1; then
   module load gcc 2>/dev/null || true
@@ -32,25 +32,41 @@ export PRTE_MCA_mpi_yield_when_idle=1
 
 chmod +x ./run_benchmark.sh
 
-echo "Job started on: $(hostname) at $(date)"
-echo "PBS job ID: ${PBS_JOBID:-N/A}"
-echo "Working directory: $(pwd)"
-echo "Host/kernel:"
-uname -a
-echo "Loaded modules:"
-module list 2>&1 || true
-echo "MPI wrapper command:"
-mpicxx --showme:command 2>/dev/null || mpicxx -show
-echo "Compiler version (via MPI wrapper):"
-mpicxx --version
-echo "MPI launcher version:"
-mpirun --version
-echo "Open MPI library version:"
-ompi_info --version 2>&1 || true
-echo "MPI compile flags:"
-mpicxx --showme:compile 2>&1 || true
-echo "MPI link flags:"
-mpicxx --showme:link 2>&1 || true
+{
+  echo "Job started on: $(hostname) at $(date)"
+  echo "PBS job ID: ${PBS_JOBID:-N/A}"
+  echo "Working directory: $(pwd)"
+  echo "Host/kernel:"
+  uname -a
+  echo "CPU details:"
+  lscpu 2>&1 || true
+  echo "Loaded modules:"
+  module list 2>&1 || true
+  echo "MPI wrapper command:"
+  mpicxx --showme:command 2>/dev/null || mpicxx -show
+  echo "Compiler version (via MPI wrapper):"
+  mpicxx --version
+  echo "MPI launcher version:"
+  mpirun --version
+  echo "Open MPI library version:"
+  ompi_info --version 2>&1 || true
+  echo "MPI compile flags:"
+  mpicxx --showme:compile 2>&1 || true
+  echo "MPI link flags:"
+  mpicxx --showme:link 2>&1 || true
+} | tee results/toolchain.txt
+
+export ENABLE_EXTERNAL_WALL_TIME=true
+export ENABLE_PERF_STAT=false
+if command -v perf >/dev/null 2>&1 && \
+   perf stat -x, -o /dev/null \
+     -e task-clock,cycles,instructions,cache-references,cache-misses,branches,branch-misses \
+     true >/dev/null 2>&1; then
+  export ENABLE_PERF_STAT=true
+  echo "Hardware counters enabled; results will be saved in results/logs/*.perf.csv" | tee -a results/toolchain.txt
+else
+  echo "Hardware counters unavailable or restricted; external wall timing will still be recorded." | tee -a results/toolchain.txt
+fi
 
 RUNS="${BASELINE_PAIRS:-5}"
 for ((pair = 1; pair <= RUNS; pair++)); do
@@ -60,10 +76,24 @@ for ((pair = 1; pair <= RUNS; pair++)); do
   export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial.txt"
   export EXPERIMENT_ID="heat_serial_pair${pair}"
   ./run_benchmark.sh heat_serial_implicit.cpp 1 1 1 3000 1000
+  if [ "$pair" -eq 1 ]; then
+    if command -v objdump >/dev/null 2>&1; then
+      objdump -d -C ./bin/heat_serial_implicit > results/disassembly/heat_serial_implicit.asm
+    else
+      echo "objdump unavailable; serial disassembly not captured." | tee -a results/toolchain.txt
+    fi
+  fi
 
   export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_implicit_p1.txt"
   export EXPERIMENT_ID="heat_mpi_implicit_p1_pair${pair}"
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 1 3000 1000
+  if [ "$pair" -eq 1 ]; then
+    if command -v objdump >/dev/null 2>&1; then
+      objdump -d -C ./bin/heat_mpi_implicit > results/disassembly/heat_mpi_implicit.asm
+    else
+      echo "objdump unavailable; MPI disassembly not captured." | tee -a results/toolchain.txt
+    fi
+  fi
 done
 
 echo "Job finished at: $(date)"

@@ -195,16 +195,37 @@ RUN_TIMES=()
 COMP_TIMES=()
 COMM_TIMES=()
 
+PERF_ENABLED=false
+if [ "${ENABLE_PERF_STAT:-false}" = "true" ] &&
+   [ "$MPI_PROCS" = "1" ] && command -v perf >/dev/null 2>&1; then
+  PERF_ENABLED=true
+fi
+
 for ((k = 1; k <= NUM_RUNS; k++)); do
   LOG_FILE="${LOGS_DIR}/${EXP_ID}_run${k}_${TIMESTAMP}.log"
+  PERF_ARGS=()
+  if [ "$PERF_ENABLED" = "true" ]; then
+    PERF_ARGS=(perf stat -x, -o "${LOGS_DIR}/${EXP_ID}_run${k}_${TIMESTAMP}.perf.csv" \
+      -e task-clock,cycles,instructions,cache-references,cache-misses,branches,branch-misses)
+  fi
   echo -n "      -> Run $k / $NUM_RUNS ... "
 
   # Run and log output (capture exit code cleanly for error diagnostics)
   EXIT_CODE=0
+  WALL_START=""
+  if [ "$OS" = "Linux" ] && [ "${ENABLE_EXTERNAL_WALL_TIME:-false}" = "true" ]; then
+    WALL_START="$(date +%s.%N)"
+  fi
   if [ ${#RUN_CMD[@]} -gt 0 ]; then
-    "${RUN_CMD[@]}" "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
+    "${RUN_CMD[@]}" "${PERF_ARGS[@]}" "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
   else
-    "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
+    "${PERF_ARGS[@]}" "$BINARY" $EXTRA_ARGS > "$LOG_FILE" 2>&1 || EXIT_CODE=$?
+  fi
+
+  if [ -n "$WALL_START" ]; then
+    WALL_END="$(date +%s.%N)"
+    WALL_SECONDS=$(awk -v start="$WALL_START" -v end="$WALL_END" 'BEGIN { printf "%.6f", end - start }')
+    printf "External wall time: %s seconds\n" "$WALL_SECONDS" >> "$LOG_FILE"
   fi
 
   if [ $EXIT_CODE -ne 0 ]; then
