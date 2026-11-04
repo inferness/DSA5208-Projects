@@ -106,6 +106,10 @@ int main(int argc, char* argv[]) {
   long long totalJacobiIters = 0;
   int nonConvergedSteps = 0;
   double maxResidualOverall = 0.0;
+  const int firstInteriorRow = 1;
+  const int lastInteriorRow = N - 2;
+  const int firstInteriorCol = 1;
+  const int lastInteriorCol = N - 2;
 
   for (int t = 0; t < STEPS; t++) {
     // Initial guess for the implicit solution u^{n+1} is the solution from time step n
@@ -119,12 +123,12 @@ int main(int argc, char* argv[]) {
       double maxDiff = 0.0;
 
       // Update interior cells using Jacobi relaxation
-      for (int i = 1; i < N - 1; i++) {
+      for (int i = firstInteriorRow; i <= lastInteriorRow; i++) {
         const size_t rowOffset = i * N;
         const size_t upOffset = (i - 1) * N;
         const size_t downOffset = (i + 1) * N;
 
-        for (int j = 1; j < N - 1; j++) {
+        for (int j = firstInteriorCol; j <= lastInteriorCol; j++) {
           double neighborsSum = u_curr[upOffset + j] +
                                 u_curr[downOffset + j] +
                                 u_curr[rowOffset + j - 1] +
@@ -168,12 +172,12 @@ int main(int argc, char* argv[]) {
     // Calculate maximum absolute residual r = b - A*u^{n+1} on the FINAL time step only
     if (t == STEPS - 1) {
       double stepMaxResidual = 0.0;
-      for (int i = 1; i < N - 1; i++) {
+      for (int i = firstInteriorRow; i <= lastInteriorRow; i++) {
         const size_t rowOffset = i * N;
         const size_t upOffset = (i - 1) * N;
         const size_t downOffset = (i + 1) * N;
 
-        for (int j = 1; j < N - 1; j++) {
+        for (int j = firstInteriorCol; j <= lastInteriorCol; j++) {
           double Au = diag * u_curr[rowOffset + j] -
                       LAMBDA * (u_curr[upOffset + j] + u_curr[downOffset + j] +
                                 u_curr[rowOffset + j - 1] + u_curr[rowOffset + j + 1]);
