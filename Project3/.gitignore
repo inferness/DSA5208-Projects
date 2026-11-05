@@ -51,3 +51,4 @@ results/logs/
 /gpu_offload_results/
 /gpu_offload_sweep_results/
 /gpu_team_sweep_results/
+/gpu_mapping_results/

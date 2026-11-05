@@ -16,6 +16,9 @@ using namespace std;
 #ifndef GPU_ROW_ONLY
 #define GPU_ROW_ONLY 0
 #endif
+#ifndef GPU_MAPPING_POLICY
+#define GPU_MAPPING_POLICY 0
+#endif
 
 inline size_t idx(size_t i, size_t j, size_t n) { return i * n + j; }
 
@@ -77,6 +80,13 @@ int main(int argc, char *argv[]) {
   cout << "Convergence Tol      : " << TOL << "\n";
   cout << "OpenMP target devices: " << deviceCount << "\n";
   cout << "Selected target      : device 0 (GPU confirmed)\n";
+#if GPU_MAPPING_POLICY == 0
+  cout << "Data mapping         : persistent for full simulation\n";
+#elif GPU_MAPPING_POLICY == 1
+  cout << "Data mapping         : mapped once per physical time step\n";
+#else
+  cout << "Data mapping         : mapped for each Jacobi iteration\n";
+#endif
 #if GPU_ROW_ONLY
   cout << "Loop mapping         : row-only (no collapse)\n";
 #else
@@ -95,12 +105,20 @@ int main(int argc, char *argv[]) {
 
   const auto start = chrono::steady_clock::now();
   {
+#if GPU_MAPPING_POLICY == 0
     // Keep all three grids resident on the GPU for the complete solve. The
     // nested target regions map already-present sections, so each iteration
     // transfers only the scalar convergence reduction.
 #pragma omp target data map(tofrom : rhs[0 : cellCount], a[0 : cellCount], b[0 : cellCount])
+#endif
     {
       for (int t = 0; t < STEPS; ++t) {
+#if GPU_MAPPING_POLICY == 1
+        // Recreate device mappings at each physical time step. The Jacobi
+        // iterations for this step reuse these device allocations.
+#pragma omp target data map(tofrom : rhs[0 : cellCount], a[0 : cellCount], b[0 : cellCount])
+#endif
+        {
         bool converged = false;
         int iter = 0;
 
@@ -207,6 +225,7 @@ int main(int argc, char *argv[]) {
         } else {
 #pragma omp target teams distribute parallel for map(to : b[0 : cellCount]) map(from : rhs[0 : cellCount])
           for (size_t k = 0; k < cellCount; ++k) rhs[k] = b[k];
+        }
         }
       }
     }
