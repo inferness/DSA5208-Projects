@@ -181,7 +181,8 @@ int main(int argc, char *argv[]) {
       // Boundary rows depend on the incoming halos, so wait before updating.
       MPI_Waitall(4, haloRequests, MPI_STATUSES_IGNORE);
 
-      #pragma omp parallel for schedule(static) reduction(max: localMaxDiff)
+      // Only two rows remain, so compute these serially instead of launching
+      // another OpenMP team for a loop with at most two iterations.
       for (int edge = 0; edge < 2; ++edge) {
         const int i = (edge == 0) ? 1 : localRows;
         if (edge == 1 && localRows == 1) continue;
