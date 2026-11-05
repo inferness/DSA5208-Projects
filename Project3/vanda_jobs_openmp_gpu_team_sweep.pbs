@@ -1,0 +1,56 @@
+#!/bin/bash
+# ==============================================================================
+# OpenMP GPU team-count sweep on Vanda (no MPI)
+# ==============================================================================
+
+#PBS -N heat_omp_gpu_teams
+#PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
+#PBS -l walltime=02:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+rm -rf -- results gpu_team_sweep_results bin
+mkdir -p results/logs gpu_team_sweep_results bin
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  if ! command -v nvc++ >/dev/null 2>&1; then
+    GPU_COMPILER_MODULE="${GPU_COMPILER_MODULE:-nvhpc}"
+    echo "Loading NVIDIA compiler module: $GPU_COMPILER_MODULE"
+    if ! module load "$GPU_COMPILER_MODULE"; then
+      echo "ERROR: Could not load GPU_COMPILER_MODULE=$GPU_COMPILER_MODULE"
+      module avail nvhpc 2>&1 || true
+      exit 1
+    fi
+  fi
+fi
+
+if ! command -v nvc++ >/dev/null 2>&1; then
+  echo "ERROR: nvc++ is unavailable. Set GPU_COMPILER_MODULE to Vanda's NVIDIA HPC SDK module."
+  if command -v module >/dev/null 2>&1; then module avail 2>&1 || true; fi
+  exit 1
+fi
+
+export GPU_CXX="${GPU_CXX:-nvc++}"
+export GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
+export CPU_CXX="${CPU_CXX:-g++}"
+export GPU_RESULTS_DIR="${GPU_RESULTS_DIR:-gpu_team_sweep_results}"
+export OMP_TARGET_OFFLOAD=MANDATORY
+export OMP_TEAMS_THREAD_LIMIT=256
+unset OMP_NUM_TEAMS
+
+echo "GPU team-count sweep allocated on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+module list 2>&1 || true
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi -L || true; fi
+
+chmod +x ./run_gpu_team_sweep.sh
+./run_gpu_team_sweep.sh "${GPU_RUNS:-5}" "${GPU_N:-3000}" \
+  "${GPU_STEPS:-1000}" "${GPU_LAMBDA:-0.05}" \
+  "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
+
+echo "GPU team-count sweep finished at: $(date)"
+echo "Results: $(pwd)/$GPU_RESULTS_DIR/"

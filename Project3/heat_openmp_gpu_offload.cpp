@@ -91,6 +91,7 @@ int main(int argc, char *argv[]) {
   long long totalJacobiIters = 0;
   int nonConvergedSteps = 0;
   double maxResidualOverall = 0.0;
+  int maxTeamsObserved = 0;
 
   const auto start = chrono::steady_clock::now();
   {
@@ -105,15 +106,17 @@ int main(int argc, char *argv[]) {
 
         for (; iter < MAX_JACOBI_ITERS; ++iter) {
           double maxDiff = 0.0;
+          int teamsThisLaunch = 0;
 
           if (currentIsA) {
 #if GPU_ROW_ONLY
-#pragma omp target teams distribute parallel for reduction(max : maxDiff) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
+#pragma omp target teams distribute parallel for reduction(max : maxDiff, teamsThisLaunch) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
 #else
-#pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
+#pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff, teamsThisLaunch) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
 #endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
+                if (j == 1) teamsThisLaunch = omp_get_num_teams();
                 const size_t k = static_cast<size_t>(i) * N + j;
                 const double neighbors = a[k - N] + a[k + N] + a[k - 1] + a[k + 1];
                 const double newValue = (rhs[k] + LAMBDA * neighbors) * invDiag;
@@ -122,15 +125,17 @@ int main(int argc, char *argv[]) {
                 if (diff > maxDiff) maxDiff = diff;
               }
             }
+            maxTeamsObserved = max(maxTeamsObserved, teamsThisLaunch);
             currentIsA = false;
           } else {
 #if GPU_ROW_ONLY
-#pragma omp target teams distribute parallel for reduction(max : maxDiff) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
+#pragma omp target teams distribute parallel for reduction(max : maxDiff, teamsThisLaunch) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
 #else
-#pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
+#pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff, teamsThisLaunch) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
 #endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
+                if (j == 1) teamsThisLaunch = omp_get_num_teams();
                 const size_t k = static_cast<size_t>(i) * N + j;
                 const double neighbors = b[k - N] + b[k + N] + b[k - 1] + b[k + 1];
                 const double newValue = (rhs[k] + LAMBDA * neighbors) * invDiag;
@@ -139,6 +144,7 @@ int main(int argc, char *argv[]) {
                 if (diff > maxDiff) maxDiff = diff;
               }
             }
+            maxTeamsObserved = max(maxTeamsObserved, teamsThisLaunch);
             currentIsA = true;
           }
 
@@ -253,6 +259,7 @@ int main(int argc, char *argv[]) {
   cout << fixed << setprecision(6);
   cout << "========================================================\n";
   cout << "Execution time       : " << elapsed << " seconds\n";
+  cout << "Max teams observed   : " << maxTeamsObserved << "\n";
   cout << "Avg Jacobi iters/step: "
        << (STEPS > 0 ? static_cast<double>(totalJacobiIters) / STEPS : 0.0)
        << "\n";
