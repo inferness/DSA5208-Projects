@@ -47,3 +47,5 @@ scratch/
 /results/
 results/*.bin
 results/logs/
+/baseline_troubleshooting/
+/gpu_offload_results/
