@@ -53,3 +53,4 @@ results/logs/
 /gpu_team_sweep_results/
 /gpu_mapping_results/
 /hybrid_openmp_results/
+/scaling_pilot_results/
