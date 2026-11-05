@@ -49,3 +49,4 @@ results/*.bin
 results/logs/
 /baseline_troubleshooting/
 /gpu_offload_results/
+/gpu_offload_sweep_results/

@@ -13,6 +13,10 @@
 
 using namespace std;
 
+#ifndef GPU_ROW_ONLY
+#define GPU_ROW_ONLY 0
+#endif
+
 inline size_t idx(size_t i, size_t j, size_t n) { return i * n + j; }
 
 int main(int argc, char *argv[]) {
@@ -73,6 +77,11 @@ int main(int argc, char *argv[]) {
   cout << "Convergence Tol      : " << TOL << "\n";
   cout << "OpenMP target devices: " << deviceCount << "\n";
   cout << "Selected target      : device 0 (GPU confirmed)\n";
+#if GPU_ROW_ONLY
+  cout << "Loop mapping         : row-only (no collapse)\n";
+#else
+  cout << "Loop mapping         : cell-level collapse(2)\n";
+#endif
   cout << "Running simulation...\n";
 
   double *rhs = uPrev.data();
@@ -98,7 +107,11 @@ int main(int argc, char *argv[]) {
           double maxDiff = 0.0;
 
           if (currentIsA) {
+#if GPU_ROW_ONLY
+#pragma omp target teams distribute parallel for reduction(max : maxDiff) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
+#else
 #pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff) map(to : rhs[0 : cellCount], a[0 : cellCount]) map(from : b[0 : cellCount])
+#endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
                 const size_t k = static_cast<size_t>(i) * N + j;
@@ -111,7 +124,11 @@ int main(int argc, char *argv[]) {
             }
             currentIsA = false;
           } else {
+#if GPU_ROW_ONLY
+#pragma omp target teams distribute parallel for reduction(max : maxDiff) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
+#else
 #pragma omp target teams distribute parallel for collapse(2) reduction(max : maxDiff) map(to : rhs[0 : cellCount], b[0 : cellCount]) map(from : a[0 : cellCount])
+#endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
                 const size_t k = static_cast<size_t>(i) * N + j;
@@ -147,7 +164,11 @@ int main(int argc, char *argv[]) {
         if (t == STEPS - 1) {
           double stepMaxResidual = 0.0;
           if (currentIsA) {
+#if GPU_ROW_ONLY
+#pragma omp target teams distribute parallel for reduction(max : stepMaxResidual) map(to : rhs[0 : cellCount], a[0 : cellCount])
+#else
 #pragma omp target teams distribute parallel for collapse(2) reduction(max : stepMaxResidual) map(to : rhs[0 : cellCount], a[0 : cellCount])
+#endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
                 const size_t k = static_cast<size_t>(i) * N + j;
@@ -158,7 +179,11 @@ int main(int argc, char *argv[]) {
               }
             }
           } else {
+#if GPU_ROW_ONLY
+#pragma omp target teams distribute parallel for reduction(max : stepMaxResidual) map(to : rhs[0 : cellCount], b[0 : cellCount])
+#else
 #pragma omp target teams distribute parallel for collapse(2) reduction(max : stepMaxResidual) map(to : rhs[0 : cellCount], b[0 : cellCount])
+#endif
             for (int i = 1; i < N - 1; ++i) {
               for (int j = 1; j < N - 1; ++j) {
                 const size_t k = static_cast<size_t>(i) * N + j;
