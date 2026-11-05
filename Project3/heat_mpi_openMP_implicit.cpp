@@ -105,6 +105,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
     cout << "========================================================\n";
     cout << "   2D Heat Equation - Hybrid MPI + OpenMP (Implicit)    \n";
+    cout << "   Row decomposition + non-blocking halo overlap        \n";
     cout << "   Method: Backward Euler with Jacobi Iterative Solver  \n";
     cout << "========================================================\n";
     cout << "Grid size (N x N)    : " << N << " x " << N << "\n";
@@ -134,22 +135,23 @@ int main(int argc, char *argv[]) {
 
     for (; iter < MAX_JACOBI_ITERS; iter++) {
 
-      // Halo exchange for u_curr performed by master thread (MPI_THREAD_FUNNELED):
-      // 1. Send first owned row upward; receive lower neighbor into bottom halo
-      MPI_Sendrecv(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0,
-                   &u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0,
-                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-      // 2. Send last owned row downward; receive upper neighbor into top halo
-      MPI_Sendrecv(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1,
-                   &u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1,
-                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      // Start the row halo exchange from the master thread. Interior rows can
+      // be updated while these transfers are in flight (MPI_THREAD_FUNNELED).
+      MPI_Request haloRequests[4];
+      MPI_Irecv(&u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1,
+                MPI_COMM_WORLD, &haloRequests[0]);
+      MPI_Irecv(&u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0,
+                MPI_COMM_WORLD, &haloRequests[1]);
+      MPI_Isend(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0,
+                MPI_COMM_WORLD, &haloRequests[2]);
+      MPI_Isend(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1,
+                MPI_COMM_WORLD, &haloRequests[3]);
 
       double localMaxDiff = 0.0;
 
-      // Update owned interior cells using multi-threaded Jacobi relaxation
+      // Update rows that do not depend on halo values while communication runs.
       #pragma omp parallel for schedule(static) reduction(max: localMaxDiff)
-      for (int i = 1; i <= localRows; i++) {
+      for (int i = 2; i < localRows; i++) {
         int globalRow = startRow + i - 1;
 
         // Keep physical top and bottom boundaries fixed at 0.0
@@ -173,6 +175,33 @@ int main(int argc, char *argv[]) {
           if (diff > localMaxDiff) {
             localMaxDiff = diff;
           }
+        }
+      }
+
+      // Boundary rows depend on the incoming halos, so wait before updating.
+      MPI_Waitall(4, haloRequests, MPI_STATUSES_IGNORE);
+
+      #pragma omp parallel for schedule(static) reduction(max: localMaxDiff)
+      for (int edge = 0; edge < 2; ++edge) {
+        const int i = (edge == 0) ? 1 : localRows;
+        if (edge == 1 && localRows == 1) continue;
+
+        const int globalRow = startRow + i - 1;
+        if (globalRow == 0 || globalRow == N - 1) continue;
+
+        const size_t rowOffset = static_cast<size_t>(i) * N;
+        const size_t upOffset = static_cast<size_t>(i - 1) * N;
+        const size_t downOffset = static_cast<size_t>(i + 1) * N;
+        for (int j = 1; j < N - 1; ++j) {
+          const double neighborsSum = u_curr[upOffset + j] +
+                                      u_curr[downOffset + j] +
+                                      u_curr[rowOffset + j - 1] +
+                                      u_curr[rowOffset + j + 1];
+          const double newVal =
+              (u_prev[rowOffset + j] + LAMBDA * neighborsSum) * invDiag;
+          u_next[rowOffset + j] = newVal;
+          const double diff = std::abs(newVal - u_curr[rowOffset + j]);
+          if (diff > localMaxDiff) localMaxDiff = diff;
         }
       }
 
@@ -208,13 +237,17 @@ int main(int argc, char *argv[]) {
 
     // Calculate maximum absolute residual r = b - A*u^{n+1} on the FINAL time step only
     if (t == STEPS - 1) {
-      // Halo exchange for finalized u^{n+1} (u_curr) before computing residual
-      MPI_Sendrecv(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0,
-                   &u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0,
-                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      MPI_Sendrecv(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1,
-                   &u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1,
-                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      // Refresh halos non-blockingly before evaluating the final residual.
+      MPI_Request residualRequests[4];
+      MPI_Irecv(&u_curr[idx(0, 0, N)], N, MPI_DOUBLE, up, 1,
+                MPI_COMM_WORLD, &residualRequests[0]);
+      MPI_Irecv(&u_curr[idx(localRows + 1, 0, N)], N, MPI_DOUBLE, down, 0,
+                MPI_COMM_WORLD, &residualRequests[1]);
+      MPI_Isend(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0,
+                MPI_COMM_WORLD, &residualRequests[2]);
+      MPI_Isend(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1,
+                MPI_COMM_WORLD, &residualRequests[3]);
+      MPI_Waitall(4, residualRequests, MPI_STATUSES_IGNORE);
 
       double stepLocalMaxResidual = 0.0;
       #pragma omp parallel for schedule(static) reduction(max: stepLocalMaxResidual)

@@ -1,0 +1,45 @@
+#!/bin/bash
+# ==============================================================================
+# Hybrid MPI + OpenMP sweep using row decomposition and nonblocking halos
+# ==============================================================================
+
+#PBS -N heat_hybrid_omp
+#PBS -l select=1:ncpus=32:mpiprocs=32:mem=32gb
+#PBS -l walltime=02:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+# This job shares results/ and bin/ with the other benchmark scripts; do not
+# run another benchmark from this project directory at the same time.
+rm -rf -- results bin hybrid_openmp_results
+mkdir -p results bin hybrid_openmp_results
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+fi
+
+if ! command -v mpicxx >/dev/null 2>&1 || ! command -v mpirun >/dev/null 2>&1; then
+  echo "ERROR: mpicxx and mpirun must be available. Load Vanda's compiler/MPI modules."
+  exit 1
+fi
+
+export OMPI_MCA_mpi_yield_when_idle=1
+export PRTE_MCA_mpi_yield_when_idle=1
+export HYBRID_RESULTS_DIR="${HYBRID_RESULTS_DIR:-hybrid_openmp_results}"
+
+echo "Hybrid MPI/OpenMP job started on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+echo "Allocated slots: $(wc -l < "$PBS_NODEFILE")"
+module list 2>&1 || true
+
+chmod +x ./run_hybrid_openmp_sweep.sh
+./run_hybrid_openmp_sweep.sh "${HYBRID_RUNS:-5}" "${HYBRID_N:-3000}" \
+  "${HYBRID_STEPS:-1000}" "${HYBRID_LAMBDA:-0.05}" \
+  "${HYBRID_MAX_ITERS:-25}" "${HYBRID_TOL:-1e-5}"
+
+echo "Hybrid MPI/OpenMP job finished at: $(date)"
+echo "Results: $(pwd)/$HYBRID_RESULTS_DIR/"
