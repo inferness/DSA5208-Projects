@@ -3,10 +3,9 @@
 # Single-GPU OpenMP target-offload experiment on Vanda (no MPI)
 # ==============================================================================
 
-#PBS -q batch_gpu
 #PBS -N heat_openmp_gpu
 #PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
-#PBS -l walltime=02:00:00
+#PBS -l walltime=01:00:00
 #PBS -j oe
 # PBS creates a unique heat_openmp_gpu.o<job-number> file outside the result folders.
 
