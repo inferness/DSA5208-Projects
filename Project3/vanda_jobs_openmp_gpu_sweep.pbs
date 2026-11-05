@@ -3,7 +3,6 @@
 # OpenMP GPU mapping and team-thread-limit sweep on Vanda (no MPI)
 # ==============================================================================
 
-#PBS -q batch_gpu
 #PBS -N heat_omp_gpu_sweep
 #PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
 #PBS -l walltime=02:00:00
