@@ -375,8 +375,11 @@ int main(int argc, char *argv[]) {
   MPI_Reduce(&localTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
 
   double maxCompTime = 0.0, maxCommTime = 0.0;
+  double sumCompTime = 0.0, sumCommTime = 0.0;
   MPI_Reduce(&local_comp_time, &maxCompTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
   MPI_Reduce(&local_comm_time, &maxCommTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
+  MPI_Reduce(&local_comp_time, &sumCompTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
+  MPI_Reduce(&local_comm_time, &sumCommTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
 
   double globalMaxResidual = 0.0;
   MPI_Reduce(&localMaxResidualOverall, &globalMaxResidual, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
@@ -411,10 +414,10 @@ int main(int argc, char *argv[]) {
     cout << fixed << setprecision(6);
     cout << "========================================================\n";
     cout << "Execution time       : " << fixed << setprecision(6) << maxTime << " seconds\n";
-    double compPct = (maxTime > 0.0) ? (maxCompTime / maxTime * 100.0) : 0.0;
-    double commPct = (maxTime > 0.0) ? (maxCommTime / maxTime * 100.0) : 0.0;
-    cout << "  - Computation Time : " << fixed << setprecision(6) << maxCompTime << " seconds (" << fixed << setprecision(2) << compPct << "%)\n";
-    cout << "  - Communication Time: " << fixed << setprecision(6) << maxCommTime << " seconds (" << fixed << setprecision(2) << commPct << "%)\n";
+    cout << "Average computation time: " << fixed << setprecision(6) << sumCompTime / size << " seconds\n";
+    cout << "Maximum computation time: " << maxCompTime << " seconds\n";
+    cout << "Average communication time: " << sumCommTime / size << " seconds\n";
+    cout << "Maximum communication time: " << maxCommTime << " seconds\n";
     cout << fixed << setprecision(6);
     if (STEPS > 0) {
       cout << "Time per time step   : " << (maxTime / STEPS) * 1000.0 << " ms\n";

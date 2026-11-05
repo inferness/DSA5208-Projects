@@ -9,10 +9,9 @@
 #   4. 1D Row Decomposition + Non-blocking Overlap (heat_mpi_nonblocking_implicit.cpp)
 #   5. 2D Block Decomposition + Blocking Communication (heat_mpi_block_implicit.cpp)
 #   6. 2D Block Decomposition + Non-blocking Overlap (heat_mpi_block_nonblocking_implicit.cpp)
-#   [Bonus: Hybrid MPI + OpenMP (heat_mpi_openMP_implicit.cpp)]
 #
-# All execution times, speedups, and statistics (Mean, Min, Max, StdDev) are
-# automatically computed and appended to ./results/all_results.csv.
+# One row per repetition is written to ./results/all_results.csv. MPI outputs
+# include average-rank and maximum-rank compute/communication times.
 # ==============================================================================
 
 set -euo pipefail
@@ -48,57 +47,35 @@ echo "=========================================================="
 
 # 1. Original unoptimized serial reference. This does not set the efficiency baseline.
 echo -e "\n>>> [1/6] Benchmarking Configuration 1: Unoptimized Serial Reference..."
-./run_benchmark.sh heat_serial_implicit_unoptimized.cpp 1 1 "$RUNS" "$N" "$STEPS"
+./run_scaling_benchmark.sh heat_serial_implicit_unoptimized.cpp 1 "$RUNS" "$N" "$STEPS"
 
 # 2. Optimized serial baseline. MPI speedup and efficiency use this timing.
 echo -e "\n>>> [2/6] Benchmarking Configuration 2: Optimized Serial Baseline..."
-./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 "$RUNS" "$N" "$STEPS"
+./run_scaling_benchmark.sh heat_serial_implicit_optimized.cpp 1 "$RUNS" "$N" "$STEPS"
 
 # 3. MPI 1D Row Decomposition + Blocking Communication
 echo -e "\n>>> [3/6] Benchmarking Configuration 3: 1D Row Decomposition (Blocking)..."
 for p in $PROCS_LIST; do
-  ./run_benchmark.sh heat_mpi_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  ./run_scaling_benchmark.sh heat_mpi_implicit.cpp "$p" "$RUNS" "$N" "$STEPS"
 done
 
 # 4. MPI 1D Row Decomposition + Non-blocking Communication
 echo -e "\n>>> [4/6] Benchmarking Configuration 4: 1D Row Decomposition (Non-blocking Overlap)..."
 for p in $PROCS_LIST; do
-  ./run_benchmark.sh heat_mpi_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  ./run_scaling_benchmark.sh heat_mpi_nonblocking_implicit.cpp "$p" "$RUNS" "$N" "$STEPS"
 done
 
 # 5. MPI 2D Block Decomposition + Blocking Communication
 echo -e "\n>>> [5/6] Benchmarking Configuration 5: 2D Block Decomposition (Blocking)..."
 for p in $PROCS_LIST; do
-  ./run_benchmark.sh heat_mpi_block_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  ./run_scaling_benchmark.sh heat_mpi_block_implicit.cpp "$p" "$RUNS" "$N" "$STEPS"
 done
 
 # 6. MPI 2D Block Decomposition + Non-blocking Communication
 echo -e "\n>>> [6/6] Benchmarking Configuration 6: 2D Block Decomposition (Non-blocking Overlap)..."
 for p in $PROCS_LIST; do
-  ./run_benchmark.sh heat_mpi_block_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
+  ./run_scaling_benchmark.sh heat_mpi_block_nonblocking_implicit.cpp "$p" "$RUNS" "$N" "$STEPS"
 done
-
-# Optional: 2D Block Decomposition with Contiguous Buffer Packing
-if [ "${RUN_CONTIGUOUS:-false}" = "true" ]; then
-  echo -e "\n>>> [Bonus] Benchmarking 2D Block (Contiguous Packing - Blocking)..."
-  for p in $PROCS_LIST; do
-    ./run_benchmark.sh heat_mpi_block_contiguous_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
-  done
-
-  echo -e "\n>>> [Bonus] Benchmarking 2D Block (Contiguous Packing - Non-blocking Overlap)..."
-  for p in $PROCS_LIST; do
-    ./run_benchmark.sh heat_mpi_block_contiguous_nonblocking_implicit.cpp "$p" 1 "$RUNS" "$N" "$STEPS"
-  done
-fi
-
-# Optional: Hybrid MPI + OpenMP (if present)
-if [ -f "heat_mpi_openMP_implicit.cpp" ] && [ "${RUN_HYBRID:-false}" = "true" ]; then
-  echo -e "\n>>> [Bonus] Benchmarking Hybrid MPI + OpenMP..."
-  ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 1 4 "$RUNS" "$N" "$STEPS"
-  ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 2 4 "$RUNS" "$N" "$STEPS"
-  ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 4 2 "$RUNS" "$N" "$STEPS"
-  ./run_benchmark.sh heat_mpi_openMP_implicit.cpp 4 4 "$RUNS" "$N" "$STEPS"
-fi
 
 echo -e "\n=========================================================="
 echo " Benchmark Sweep Finished Successfully!"

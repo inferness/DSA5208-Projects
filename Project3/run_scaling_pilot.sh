@@ -50,14 +50,15 @@ echo "Running the single pilot..."
   > "$RUN_LOG" 2>&1
 
 TIME_VAL="$(awk -F: '/^Execution time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
-COMP_VAL="$(awk -F: '/Computation Time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
-COMM_VAL="$(awk -F: '/Communication Time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
-COMP_PCT="$(awk -F'[(%]' '/Computation Time/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$RUN_LOG")"
-COMM_PCT="$(awk -F'[(%]' '/Communication Time/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$RUN_LOG")"
+AVG_COMP_VAL="$(awk -F: 'tolower($1) ~ /average computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
+MAX_COMP_VAL="$(awk -F: 'tolower($1) ~ /maximum computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
+AVG_COMM_VAL="$(awk -F: 'tolower($1) ~ /average communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
+MAX_COMM_VAL="$(awk -F: 'tolower($1) ~ /maximum communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$RUN_LOG")"
 ITERS_VAL="$(awk -F: '/^Total Jacobi iters/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$RUN_LOG")"
 RESIDUAL_VAL="$(awk -F: '/^Max absolute residual/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$RUN_LOG")"
 
-if [ -z "$TIME_VAL" ] || [ -z "$COMP_VAL" ] || [ -z "$COMM_VAL" ] ||
+if [ -z "$TIME_VAL" ] || [ -z "$AVG_COMP_VAL" ] || [ -z "$MAX_COMP_VAL" ] ||
+   [ -z "$AVG_COMM_VAL" ] || [ -z "$MAX_COMM_VAL" ] ||
    [ -z "$ITERS_VAL" ] || [ -z "$RESIDUAL_VAL" ]; then
   cat "$RUN_LOG"
   echo "Error: pilot log is missing one or more expected timing/validation fields." >&2
@@ -65,8 +66,8 @@ if [ -z "$TIME_VAL" ] || [ -z "$COMP_VAL" ] || [ -z "$COMM_VAL" ] ||
 fi
 
 CSV_FILE="$RESULTS_DIR/all_scaling_pilot_results.csv"
-echo "N,steps,mpi_ranks,repetitions,execution_time_s,computation_time_s,computation_pct,communication_time_s,communication_pct,total_jacobi_iters,max_residual" > "$CSV_FILE"
-echo "$N,$STEPS,$P,1,$TIME_VAL,$COMP_VAL,$COMP_PCT,$COMM_VAL,$COMM_PCT,$ITERS_VAL,$RESIDUAL_VAL" >> "$CSV_FILE"
+echo "N,steps,mpi_ranks,run,execution_time_s,avg_rank_comp_time_s,max_rank_comp_time_s,avg_rank_comm_time_s,max_rank_comm_time_s,total_jacobi_iters,max_residual" > "$CSV_FILE"
+echo "$N,$STEPS,$P,1,$TIME_VAL,$AVG_COMP_VAL,$MAX_COMP_VAL,$AVG_COMM_VAL,$MAX_COMM_VAL,$ITERS_VAL,$RESIDUAL_VAL" >> "$CSV_FILE"
 
 cat > "$RESULTS_DIR/summary.txt" <<EOF
 Strong-scaling pilot summary
@@ -74,8 +75,10 @@ Grid: N=$N, steps=$STEPS
 MPI ranks: $P
 Repetitions: 1
 Execution time: $TIME_VAL seconds
-Computation time: $COMP_VAL seconds ($COMP_PCT%)
-Communication time: $COMM_VAL seconds ($COMM_PCT%)
+Average-rank computation time: $AVG_COMP_VAL seconds
+Maximum-rank computation time: $MAX_COMP_VAL seconds
+Average-rank communication time: $AVG_COMM_VAL seconds
+Maximum-rank communication time: $MAX_COMM_VAL seconds
 Total Jacobi iterations: $ITERS_VAL
 Maximum residual: $RESIDUAL_VAL
 Run log: $RUN_LOG
