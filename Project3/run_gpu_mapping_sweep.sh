@@ -13,7 +13,8 @@ TOL="${6:-1e-5}"
 GPU_CXX="${GPU_CXX:-nvc++}"
 CPU_CXX="${CPU_CXX:-g++}"
 GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
-RESULTS_ROOT="${GPU_RESULTS_DIR:-gpu_mapping_results}"
+RESULTS_ROOT="${GPU_RESULTS_DIR:-results/openmp_gpu_mapping}"
+BIN_DIR="${BIN_DIR:-bin}"
 POLICIES=(persistent per_time_step per_jacobi_iteration)
 SOURCES=(heat_openmp_gpu_offload.cpp heat_openmp_gpu_mapping_per_step.cpp heat_openmp_gpu_mapping_per_jacobi.cpp)
 BINARIES=(heat_gpu_mapping_persistent heat_gpu_mapping_per_step heat_gpu_mapping_per_jacobi)
@@ -30,7 +31,7 @@ for compiler in "$GPU_CXX" "$CPU_CXX"; do
   fi
 done
 
-mkdir -p bin results/logs "$RESULTS_ROOT"
+mkdir -p "$BIN_DIR" "$RESULTS_ROOT"
 read -r -a GPU_FLAGS <<< "$GPU_CXXFLAGS"
 export OMP_TARGET_OFFLOAD=MANDATORY
 export OMP_TEAMS_THREAD_LIMIT="$THREAD_LIMIT"
@@ -53,14 +54,14 @@ unset OMP_NUM_TEAMS
 } | tee "$RESULTS_ROOT/gpu_mapping_toolchain.txt"
 
 echo "[1/4] Compiling optimized CPU reference..."
-"$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o bin/heat_serial_implicit_optimized
+"$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o "$BIN_DIR/heat_serial_implicit_optimized"
 CPU_REFERENCE_LOG="$RESULTS_ROOT/heat_serial_implicit_optimized_reference.log"
-OMP_NUM_THREADS=1 ./bin/heat_serial_implicit_optimized \
+OMP_NUM_THREADS=1 "$BIN_DIR/heat_serial_implicit_optimized" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" > "$CPU_REFERENCE_LOG" 2>&1
 
 echo "[2/4] Compiling three GPU data-mapping variants..."
 for i in "${!POLICIES[@]}"; do
-  "$GPU_CXX" "${GPU_FLAGS[@]}" "${SOURCES[$i]}" -o "bin/${BINARIES[$i]}" \
+  "$GPU_CXX" "${GPU_FLAGS[@]}" "${SOURCES[$i]}" -o "$BIN_DIR/${BINARIES[$i]}" \
     2>&1 | tee "$RESULTS_ROOT/compile_${POLICIES[$i]}.log"
 done
 
@@ -69,7 +70,7 @@ echo "mapping_policy,requested_teams,thread_limit,runs,mean_time_s,min_time_s,ma
 
 for i in "${!POLICIES[@]}"; do
   POLICY="${POLICIES[$i]}"
-  BINARY="./bin/${BINARIES[$i]}"
+  BINARY="$BIN_DIR/${BINARIES[$i]}"
   CONFIG_DIR="$RESULTS_ROOT/$POLICY"
   mkdir -p "$CONFIG_DIR/logs"
   RUN_TIMES=()

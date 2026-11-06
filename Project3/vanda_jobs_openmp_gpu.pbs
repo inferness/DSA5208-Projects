@@ -12,8 +12,11 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-rm -rf -- results gpu_offload_results bin
-mkdir -p results/logs gpu_offload_results/logs bin
+JOB_RESULTS_DIR="results/openmp_gpu_offload"
+JOB_BIN_DIR="bin/openmp_gpu_offload"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" GPU_RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 if command -v module >/dev/null 2>&1; then
   module load gcc 2>/dev/null || true
@@ -39,7 +42,6 @@ export GPU_CXX="${GPU_CXX:-nvc++}"
 export GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
 export CPU_CXX="${CPU_CXX:-g++}"
 export GPU_OMP_THREADS="${GPU_OMP_THREADS:-8}"
-export GPU_RESULTS_DIR="${GPU_RESULTS_DIR:-gpu_offload_results}"
 export OMP_TARGET_OFFLOAD=MANDATORY
 
 echo "GPU job allocated on: $(hostname) at $(date)"
@@ -55,5 +57,4 @@ chmod +x ./run_gpu_offload.sh
   "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
 
 echo "GPU job finished at: $(date)"
-echo "GPU results: $(pwd)/$GPU_RESULTS_DIR/"
-echo "CPU reference: $(pwd)/results/"
+echo "GPU results: $(pwd)/$JOB_RESULTS_DIR/"

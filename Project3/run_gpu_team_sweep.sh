@@ -13,7 +13,8 @@ TOL="${6:-1e-5}"
 GPU_CXX="${GPU_CXX:-nvc++}"
 CPU_CXX="${CPU_CXX:-g++}"
 GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
-GPU_RESULTS_ROOT="${GPU_RESULTS_DIR:-gpu_team_sweep_results}"
+GPU_RESULTS_ROOT="${GPU_RESULTS_DIR:-results/openmp_gpu_team_sweep}"
+BIN_DIR="${BIN_DIR:-bin}"
 TEAM_COUNTS=(256 512 1024 2048)
 THREAD_LIMIT=256
 
@@ -28,7 +29,7 @@ for compiler in "$GPU_CXX" "$CPU_CXX"; do
   fi
 done
 
-mkdir -p bin results/logs "$GPU_RESULTS_ROOT"
+mkdir -p "$BIN_DIR" "$GPU_RESULTS_ROOT"
 read -r -a GPU_FLAGS <<< "$GPU_CXXFLAGS"
 export OMP_TARGET_OFFLOAD=MANDATORY
 export OMP_TEAMS_THREAD_LIMIT="$THREAD_LIMIT"
@@ -51,14 +52,14 @@ export OMP_TEAMS_THREAD_LIMIT="$THREAD_LIMIT"
 } | tee "$GPU_RESULTS_ROOT/gpu_team_sweep_toolchain.txt"
 
 echo "[1/3] Compiling optimized CPU reference..."
-"$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o bin/heat_serial_implicit_optimized
+"$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp -o "$BIN_DIR/heat_serial_implicit_optimized"
 CPU_REFERENCE_LOG="$GPU_RESULTS_ROOT/heat_serial_implicit_optimized_reference.log"
-OMP_NUM_THREADS=1 ./bin/heat_serial_implicit_optimized \
+OMP_NUM_THREADS=1 "$BIN_DIR/heat_serial_implicit_optimized" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" > "$CPU_REFERENCE_LOG" 2>&1
 
 echo "[2/3] Compiling collapse(2) GPU code with actual-team reporting..."
 "$GPU_CXX" "${GPU_FLAGS[@]}" heat_openmp_gpu_offload.cpp \
-  -o bin/heat_openmp_gpu_team_sweep 2>&1 | tee "$GPU_RESULTS_ROOT/compile.log"
+  -o "$BIN_DIR/heat_openmp_gpu_team_sweep" 2>&1 | tee "$GPU_RESULTS_ROOT/compile.log"
 
 CSV_FILE="$GPU_RESULTS_ROOT/all_gpu_team_sweep_results.csv"
 echo "requested_teams,thread_limit,mapping,runs,mean_time_s,min_time_s,max_time_s,stddev_s,mean_actual_teams,max_actual_teams,mean_jacobi_iters,max_cpu_diff" > "$CSV_FILE"
@@ -78,7 +79,7 @@ for REQUESTED_TEAMS in "${TEAM_COUNTS[@]}"; do
     echo "Run $run / $RUNS ..."
     OMP_NUM_TEAMS="$REQUESTED_TEAMS" OMP_TEAMS_THREAD_LIMIT="$THREAD_LIMIT" \
       OMP_TARGET_OFFLOAD=MANDATORY GPU_RESULTS_DIR="$CONFIG_DIR" \
-      ./bin/heat_openmp_gpu_team_sweep "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
+      "$BIN_DIR/heat_openmp_gpu_team_sweep" "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
       > "$LOG_FILE" 2>&1
 
     if ! grep -q "Selected target.*GPU confirmed" "$LOG_FILE" ||

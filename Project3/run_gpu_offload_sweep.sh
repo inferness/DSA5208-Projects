@@ -13,7 +13,8 @@ TOL="${6:-1e-5}"
 GPU_CXX="${GPU_CXX:-nvc++}"
 CPU_CXX="${CPU_CXX:-g++}"
 GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
-GPU_RESULTS_ROOT="${GPU_RESULTS_DIR:-gpu_offload_sweep_results}"
+GPU_RESULTS_ROOT="${GPU_RESULTS_DIR:-results/openmp_gpu_sweep}"
+BIN_DIR="${BIN_DIR:-bin}"
 THREAD_LIMITS=(128 256 512)
 MAPPINGS=(collapse2 row_only)
 
@@ -30,7 +31,7 @@ if ! command -v "$CPU_CXX" >/dev/null 2>&1; then
   exit 2
 fi
 
-mkdir -p bin results/logs "$GPU_RESULTS_ROOT"
+mkdir -p "$BIN_DIR" "$GPU_RESULTS_ROOT"
 read -r -a GPU_FLAGS <<< "$GPU_CXXFLAGS"
 unset OMP_NUM_TEAMS
 export OMP_TARGET_OFFLOAD=MANDATORY
@@ -53,19 +54,19 @@ export OMP_TARGET_OFFLOAD=MANDATORY
 
 echo "[1/4] Compiling optimized CPU reference..."
 "$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp \
-  -o bin/heat_serial_implicit_optimized
+  -o "$BIN_DIR/heat_serial_implicit_optimized"
 CPU_REFERENCE_LOG="$GPU_RESULTS_ROOT/heat_serial_implicit_optimized_reference.log"
-OMP_NUM_THREADS=1 ./bin/heat_serial_implicit_optimized \
+OMP_NUM_THREADS=1 "$BIN_DIR/heat_serial_implicit_optimized" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" > "$CPU_REFERENCE_LOG" 2>&1
 echo "      CPU reference saved in $CPU_REFERENCE_LOG"
 
 echo "[2/4] Compiling collapse(2) GPU variant..."
 "$GPU_CXX" "${GPU_FLAGS[@]}" heat_openmp_gpu_offload.cpp \
-  -o bin/heat_openmp_gpu_collapse2 2>&1 | tee "$GPU_RESULTS_ROOT/compile_collapse2.log"
+  -o "$BIN_DIR/heat_openmp_gpu_collapse2" 2>&1 | tee "$GPU_RESULTS_ROOT/compile_collapse2.log"
 
 echo "[3/4] Compiling row-only GPU variant..."
 "$GPU_CXX" "${GPU_FLAGS[@]}" -DGPU_ROW_ONLY=1 heat_openmp_gpu_offload.cpp \
-  -o bin/heat_openmp_gpu_row_only 2>&1 | tee "$GPU_RESULTS_ROOT/compile_row_only.log"
+  -o "$BIN_DIR/heat_openmp_gpu_row_only" 2>&1 | tee "$GPU_RESULTS_ROOT/compile_row_only.log"
 
 CSV_FILE="$GPU_RESULTS_ROOT/all_gpu_sweep_results.csv"
 echo "thread_limit,mapping,num_teams,runs,mean_time_s,min_time_s,max_time_s,stddev_s,mean_jacobi_iters,max_cpu_diff" > "$CSV_FILE"
@@ -75,9 +76,9 @@ for THREAD_LIMIT in "${THREAD_LIMITS[@]}"; do
     CONFIG_DIR="$GPU_RESULTS_ROOT/thread_limit_${THREAD_LIMIT}/${MAPPING}"
     mkdir -p "$CONFIG_DIR/logs"
     if [ "$MAPPING" = "collapse2" ]; then
-      BINARY="./bin/heat_openmp_gpu_collapse2"
+      BINARY="$BIN_DIR/heat_openmp_gpu_collapse2"
     else
-      BINARY="./bin/heat_openmp_gpu_row_only"
+      BINARY="$BIN_DIR/heat_openmp_gpu_row_only"
     fi
 
     echo "=========================================================="

@@ -13,9 +13,11 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-# These jobs share results/ and bin/, so run only one from this project directory at a time.
-rm -rf -- results bin
-mkdir -p results/vectorization results/disassembly bin
+JOB_RESULTS_DIR="results/baseline_troubleshooting"
+JOB_BIN_DIR="bin/baseline_troubleshooting"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR/vectorization" "$JOB_RESULTS_DIR/disassembly" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 if command -v module >/dev/null 2>&1; then
   module load gcc 2>/dev/null || true
@@ -55,7 +57,7 @@ chmod +x ./run_benchmark.sh
   echo "MPI link flags:"
   mpicxx --showme:link 2>&1 || true
   echo "Serial variants: original per-cell max and optimized per-row max; optimized serial is the efficiency baseline"
-} | tee results/toolchain.txt
+} | tee "$RESULTS_DIR/toolchain.txt"
 
 export ENABLE_EXTERNAL_WALL_TIME=true
 export ENABLE_PERF_STAT=false
@@ -64,9 +66,9 @@ if command -v perf >/dev/null 2>&1 && \
      -e task-clock,cycles,instructions,cache-references,cache-misses,branches,branch-misses \
      true >/dev/null 2>&1; then
   export ENABLE_PERF_STAT=true
-  echo "Hardware counters enabled; results will be saved in results/logs/*.perf.csv" | tee -a results/toolchain.txt
+  echo "Hardware counters enabled; results will be saved in $RESULTS_DIR/logs/*.perf.csv" | tee -a "$RESULTS_DIR/toolchain.txt"
 else
-  echo "Hardware counters unavailable or restricted; external wall timing will still be recorded." | tee -a results/toolchain.txt
+  echo "Hardware counters unavailable or restricted; external wall timing will still be recorded." | tee -a "$RESULTS_DIR/toolchain.txt"
 fi
 
 RUNS="${BASELINE_PAIRS:-5}"
@@ -74,39 +76,39 @@ for ((pair = 1; pair <= RUNS; pair++)); do
   echo "=========================================================="
   echo "Paired benchmark $pair / $RUNS at $(date)"
 
-  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial_unoptimized.txt"
+  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=$RESULTS_DIR/vectorization/serial_unoptimized.txt"
   export EXPERIMENT_ID="heat_serial_unoptimized_pair${pair}"
   ./run_benchmark.sh heat_serial_implicit_unoptimized.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then
-      objdump -d -C ./bin/heat_serial_implicit_unoptimized > results/disassembly/heat_serial_implicit_unoptimized.asm
+      objdump -d -C "$BIN_DIR/heat_serial_implicit_unoptimized" > "$RESULTS_DIR/disassembly/heat_serial_implicit_unoptimized.asm"
     else
-      echo "objdump unavailable; unoptimized serial disassembly not captured." | tee -a results/toolchain.txt
+      echo "objdump unavailable; unoptimized serial disassembly not captured." | tee -a "$RESULTS_DIR/toolchain.txt"
     fi
   fi
 
-  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/serial_optimized.txt"
+  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=$RESULTS_DIR/vectorization/serial_optimized.txt"
   export EXPERIMENT_ID="heat_serial_optimized_pair${pair}"
   ./run_benchmark.sh heat_serial_implicit_optimized.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then
-      objdump -d -C ./bin/heat_serial_implicit_optimized > results/disassembly/heat_serial_implicit_optimized.asm
+      objdump -d -C "$BIN_DIR/heat_serial_implicit_optimized" > "$RESULTS_DIR/disassembly/heat_serial_implicit_optimized.asm"
     else
-      echo "objdump unavailable; optimized serial disassembly not captured." | tee -a results/toolchain.txt
+      echo "objdump unavailable; optimized serial disassembly not captured." | tee -a "$RESULTS_DIR/toolchain.txt"
     fi
   fi
 
-  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=results/vectorization/mpi_implicit_p1.txt"
+  export CXXFLAGS="-O3 -std=c++17 -fopt-info-vec-all=$RESULTS_DIR/vectorization/mpi_implicit_p1.txt"
   export EXPERIMENT_ID="heat_mpi_implicit_p1_optimized_baseline_pair${pair}"
   ./run_benchmark.sh heat_mpi_implicit.cpp 1 1 1 3000 1000
   if [ "$pair" -eq 1 ]; then
     if command -v objdump >/dev/null 2>&1; then
-      objdump -d -C ./bin/heat_mpi_implicit > results/disassembly/heat_mpi_implicit.asm
+      objdump -d -C "$BIN_DIR/heat_mpi_implicit" > "$RESULTS_DIR/disassembly/heat_mpi_implicit.asm"
     else
-      echo "objdump unavailable; MPI disassembly not captured." | tee -a results/toolchain.txt
+      echo "objdump unavailable; MPI disassembly not captured." | tee -a "$RESULTS_DIR/toolchain.txt"
     fi
   fi
 done
 
 echo "Job finished at: $(date)"
-echo "Results: $(pwd)/results/"
+echo "Results: $(pwd)/$RESULTS_DIR/"

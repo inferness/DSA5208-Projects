@@ -14,7 +14,8 @@ GPU_CXX="${GPU_CXX:-nvc++}"
 CPU_CXX="${CPU_CXX:-g++}"
 GPU_OMP_THREADS="${GPU_OMP_THREADS:-8}"
 GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
-GPU_RESULTS_DIR="${GPU_RESULTS_DIR:-gpu_offload_results}"
+GPU_RESULTS_DIR="${GPU_RESULTS_DIR:-results/openmp_gpu_offload}"
+BIN_DIR="${BIN_DIR:-bin}"
 
 if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
   echo "Error: runs must be a positive integer." >&2
@@ -29,7 +30,7 @@ if ! command -v "$CPU_CXX" >/dev/null 2>&1; then
   exit 2
 fi
 
-mkdir -p bin results/logs "$GPU_RESULTS_DIR/logs"
+mkdir -p "$BIN_DIR" "$GPU_RESULTS_DIR/logs"
 export GPU_RESULTS_DIR
 read -r -a GPU_FLAGS <<< "$GPU_CXXFLAGS"
 
@@ -58,23 +59,23 @@ echo "OpenMP host threads: $GPU_OMP_THREADS"
 
 echo "[1/3] Compiling optimized CPU reference..."
 "$CPU_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp \
-  -o bin/heat_serial_implicit_optimized
+  -o "$BIN_DIR/heat_serial_implicit_optimized"
 CPU_REFERENCE_LOG="$GPU_RESULTS_DIR/logs/heat_serial_implicit_optimized_reference.log"
-OMP_NUM_THREADS=1 ./bin/heat_serial_implicit_optimized \
+OMP_NUM_THREADS=1 "$BIN_DIR/heat_serial_implicit_optimized" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" > "$CPU_REFERENCE_LOG" 2>&1
 echo "      CPU reference saved in $CPU_REFERENCE_LOG"
 
 echo "[2/3] Compiling OpenMP GPU offload implementation..."
-echo "      Command: $GPU_CXX $GPU_CXXFLAGS heat_openmp_gpu_offload.cpp -o bin/heat_openmp_gpu_offload"
+echo "      Command: $GPU_CXX $GPU_CXXFLAGS heat_openmp_gpu_offload.cpp -o $BIN_DIR/heat_openmp_gpu_offload"
 "$GPU_CXX" "${GPU_FLAGS[@]}" heat_openmp_gpu_offload.cpp \
-  -o bin/heat_openmp_gpu_offload 2>&1 | tee "$GPU_RESULTS_DIR/gpu_offload_compile.log"
+  -o "$BIN_DIR/heat_openmp_gpu_offload" 2>&1 | tee "$GPU_RESULTS_DIR/gpu_offload_compile.log"
 
 RUN_TIMES=()
 for ((run = 1; run <= RUNS; run++)); do
   LOG_FILE="$GPU_RESULTS_DIR/logs/heat_openmp_gpu_offload_run${run}_$(date +'%Y%m%d_%H%M%S').log"
   echo "[3/3] GPU run $run / $RUNS ..."
   OMP_NUM_THREADS="$GPU_OMP_THREADS" OMP_TARGET_OFFLOAD=MANDATORY \
-    ./bin/heat_openmp_gpu_offload "$N" "$STEPS" "$LAMBDA" \
+    "$BIN_DIR/heat_openmp_gpu_offload" "$N" "$STEPS" "$LAMBDA" \
       "$MAX_ITERS" "$TOL" > "$LOG_FILE" 2>&1
   cat "$LOG_FILE"
   TIME_VAL="$(grep -i '^Execution time' "$LOG_FILE" | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)"

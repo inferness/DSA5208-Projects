@@ -14,9 +14,9 @@ MAX_ITERS="${7:-25}"
 TOL="${8:-1e-5}"
 MPI_CXX="${MPI_CXX:-mpicxx}"
 MPI_RUN="${MPI_RUN:-mpirun}"
-RESULTS_DIR="results"
+RESULTS_DIR="${RESULTS_DIR:-results}"
 LOGS_DIR="$RESULTS_DIR/logs"
-BIN_DIR="bin"
+BIN_DIR="${BIN_DIR:-bin}"
 
 if [ ! -f "$SOURCE" ]; then
   echo "Error: source file '$SOURCE' not found." >&2

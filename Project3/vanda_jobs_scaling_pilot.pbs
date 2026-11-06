@@ -11,8 +11,11 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-rm -rf -- scaling_pilot_results
-mkdir -p scaling_pilot_results
+JOB_RESULTS_DIR="results/scaling_pilot"
+JOB_BIN_DIR="bin/scaling_pilot"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export SCALING_PILOT_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 if command -v module >/dev/null 2>&1; then
   module load gcc 2>/dev/null || true
@@ -26,7 +29,6 @@ fi
 
 export OMPI_MCA_mpi_yield_when_idle=1
 export PRTE_MCA_mpi_yield_when_idle=1
-export SCALING_PILOT_DIR="${SCALING_PILOT_DIR:-scaling_pilot_results}"
 
 echo "Scaling pilot started on: $(hostname) at $(date)"
 echo "PBS job ID: ${PBS_JOBID:-N/A}"
@@ -37,4 +39,4 @@ chmod +x ./run_scaling_pilot.sh
 ./run_scaling_pilot.sh
 
 echo "Scaling pilot finished at: $(date)"
-echo "Results: $(pwd)/$SCALING_PILOT_DIR/"
+echo "Results: $(pwd)/$JOB_RESULTS_DIR/"

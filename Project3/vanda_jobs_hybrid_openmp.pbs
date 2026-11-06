@@ -11,10 +11,11 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-# This job shares results/ and bin/ with the other benchmark scripts; do not
-# run another benchmark from this project directory at the same time.
-rm -rf -- results bin hybrid_openmp_results
-mkdir -p results bin hybrid_openmp_results
+JOB_RESULTS_DIR="results/hybrid_openmp"
+JOB_BIN_DIR="bin/hybrid_openmp"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" HYBRID_RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 if command -v module >/dev/null 2>&1; then
   module load gcc 2>/dev/null || true
@@ -28,7 +29,6 @@ fi
 
 export OMPI_MCA_mpi_yield_when_idle=1
 export PRTE_MCA_mpi_yield_when_idle=1
-export HYBRID_RESULTS_DIR="${HYBRID_RESULTS_DIR:-hybrid_openmp_results}"
 
 echo "Hybrid MPI/OpenMP job started on: $(hostname) at $(date)"
 echo "PBS job ID: ${PBS_JOBID:-N/A}"
@@ -42,4 +42,4 @@ chmod +x ./run_hybrid_openmp_sweep.sh
   "${HYBRID_MAX_ITERS:-25}" "${HYBRID_TOL:-1e-5}"
 
 echo "Hybrid MPI/OpenMP job finished at: $(date)"
-echo "Results: $(pwd)/$HYBRID_RESULTS_DIR/"
+echo "Results: $(pwd)/$JOB_RESULTS_DIR/"

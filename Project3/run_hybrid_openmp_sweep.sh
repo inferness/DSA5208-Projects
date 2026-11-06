@@ -12,7 +12,8 @@ MAX_ITERS="${5:-25}"
 TOL="${6:-1e-5}"
 MPI_CXX="${MPI_CXX:-mpicxx}"
 MPI_RUN="${MPI_RUN:-mpirun}"
-RESULTS_ROOT="${HYBRID_RESULTS_DIR:-hybrid_openmp_results}"
+RESULTS_ROOT="${HYBRID_RESULTS_DIR:-results/hybrid_openmp}"
+BIN_DIR="${BIN_DIR:-bin}"
 PROCS=(1 2 4 8 16 32)
 THREADS=(32 16 8 4 2 1)
 
@@ -29,7 +30,7 @@ if ! command -v "$MPI_RUN" >/dev/null 2>&1; then
   exit 2
 fi
 
-mkdir -p bin results "$RESULTS_ROOT"
+mkdir -p "$BIN_DIR" "$RESULTS_ROOT"
 export OMP_DYNAMIC=FALSE
 export OMP_PLACES=cores
 export OMP_PROC_BIND=close
@@ -49,14 +50,14 @@ export OMP_PROC_BIND=close
 
 echo "[1/3] Compiling the optimized serial reference..."
 "$MPI_CXX" -O3 -std=c++17 heat_serial_implicit_optimized.cpp \
-  -o bin/heat_serial_implicit_optimized
-OMP_NUM_THREADS=1 ./bin/heat_serial_implicit_optimized \
+  -o "$BIN_DIR/heat_serial_implicit_optimized"
+OMP_NUM_THREADS=1 "$BIN_DIR/heat_serial_implicit_optimized" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
   > "$RESULTS_ROOT/serial_reference.log" 2>&1
 
 echo "[2/3] Compiling row-decomposed nonblocking hybrid MPI+OpenMP..."
 "$MPI_CXX" -O3 -std=c++17 -fopenmp heat_mpi_openMP_implicit.cpp \
-  -o bin/heat_mpi_openMP_implicit 2>&1 | tee "$RESULTS_ROOT/compile.log"
+  -o "$BIN_DIR/heat_mpi_openMP_implicit" 2>&1 | tee "$RESULTS_ROOT/compile.log"
 
 CSV_FILE="$RESULTS_ROOT/all_hybrid_results.csv"
 echo "mpi_ranks,threads_per_rank,requested_total_workers,runs,mean_time_s,min_time_s,max_time_s,stddev_s,observed_threads_per_rank,mean_jacobi_iters,max_residual,max_baseline_diff" > "$CSV_FILE"
@@ -79,7 +80,7 @@ for i in "${!PROCS[@]}"; do
     echo "Run $run / $RUNS ..."
     OMP_NUM_THREADS="$T" "$MPI_RUN" -np "$P" \
       --map-by "ppr:${P}:node:PE=${T}" --bind-to core \
-      ./bin/heat_mpi_openMP_implicit "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
+      "$BIN_DIR/heat_mpi_openMP_implicit" "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
       > "$LOG_FILE" 2>&1
 
     if ! grep -q "Execution time" "$LOG_FILE"; then

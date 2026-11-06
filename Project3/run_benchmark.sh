@@ -44,16 +44,17 @@ if [ -z "$SOURCE_FILE" ] || [ ! -f "$SOURCE_FILE" ]; then
 fi
 
 BASE_NAME="$(basename "$SOURCE_FILE" .cpp)"
-BINARY="./bin/${BASE_NAME}"
+BIN_DIR="${BIN_DIR:-./bin}"
+BINARY="${BIN_DIR}/${BASE_NAME}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 EXP_ID="${EXPERIMENT_ID:-${BASE_NAME}_p${MPI_PROCS}_t${OMP_THREADS}}"
 
-RESULTS_DIR="./results"
+RESULTS_DIR="${RESULTS_DIR:-./results}"
 LOGS_DIR="${RESULTS_DIR}/logs"
 SUMMARY_FILE="${RESULTS_DIR}/${EXP_ID}_summary.txt"
 CSV_FILE="${RESULTS_DIR}/all_results.csv"
 
-mkdir -p "./bin" "$RESULTS_DIR" "$LOGS_DIR"
+mkdir -p "$BIN_DIR" "$RESULTS_DIR" "$LOGS_DIR"
 
 # Ensure Atlas cluster GCC libraries (MPFR, GMP, MPC) are present if running on Atlas:
 if [ -d "/app1/centos6.3/gnu/mpfr-2.4.2/lib" ]; then

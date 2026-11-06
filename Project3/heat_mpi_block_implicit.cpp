@@ -7,6 +7,7 @@
 #include <mpi.h>
 #include <string>
 #include <vector>
+#include "result_paths.hpp"
 
 using namespace std;
 
@@ -384,7 +385,7 @@ int main(int argc, char *argv[]) {
 
   // Automatic verification against serial baseline if baseline file exists
   int baselineExists = 0;
-  string baselineBin = "results/baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin";
+  string baselineBin = result_path("baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin");
   if (rank == 0) {
     ifstream testFile(baselineBin, ios::binary);
     if (testFile.good()) {

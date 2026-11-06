@@ -10,6 +10,7 @@
 #include <omp.h>
 #include <string>
 #include <vector>
+#include "result_paths.hpp"
 
 using namespace std;
 
@@ -258,8 +259,8 @@ int main(int argc, char *argv[]) {
   }
 
   double maxBaselineDifference = -1.0;
-  const string baselinePath = "results/baseline_implicit_N" + to_string(N) +
-                              "_S" + to_string(STEPS) + ".bin";
+  const string baselinePath = result_path("baseline_implicit_N" + to_string(N) +
+                                          "_S" + to_string(STEPS) + ".bin");
   {
     ifstream baseline(baselinePath, ios::binary);
     if (baseline) {

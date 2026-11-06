@@ -22,10 +22,12 @@
 # Change to the directory from which the job was submitted:
 cd "$PBS_O_WORKDIR"
 
-# Start this batch job with clean generated outputs.
-# These jobs share results/ and bin/, so run only one from this project directory at a time.
-rm -rf -- results bin
-mkdir -p results bin
+# Keep this legacy job's outputs isolated from other experiments.
+JOB_RESULTS_DIR="results/atlas_legacy"
+JOB_BIN_DIR="bin/atlas_legacy"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 # Load required cluster modules (Atlas environment):
 module load gcc/7.3.0 openmpi/4.1.2 2>/dev/null || module load openmpi/4.1.2 2>/dev/null || true
@@ -60,6 +62,6 @@ chmod +x *.sh
 
 echo "=========================================================="
 echo " Job finished at $(date)"
-echo " Results available in: $(pwd)/results/"
-echo " All Results Table   : $(pwd)/results/all_results.csv"
+echo " Results available in: $(pwd)/$JOB_RESULTS_DIR/"
+echo " All Results Table   : $(pwd)/$JOB_RESULTS_DIR/all_results.csv"
 echo "=========================================================="

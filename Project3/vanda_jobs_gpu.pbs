@@ -13,9 +13,11 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-# These jobs share results/ and bin/, so run only one from this project directory at a time.
-rm -rf -- results bin
-mkdir -p results bin
+JOB_RESULTS_DIR="results/gpu_template"
+JOB_BIN_DIR="bin/gpu_template"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 echo "GPU job allocated on: $(hostname) at $(date)"
 echo "PBS job ID: ${PBS_JOBID:-N/A}"

@@ -10,9 +10,11 @@
 # PBS creates a unique test_serial.o<job-number> file outside results/.
 
 cd "$PBS_O_WORKDIR"
-# These jobs share results/ and bin/, so run only one from this project directory at a time.
-rm -rf -- results bin
-mkdir -p results bin
+JOB_RESULTS_DIR="results/serial_test"
+JOB_BIN_DIR="bin/serial_test"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 
 # Load modules and library paths
 module load gcc/7.3.0 openmpi/4.1.2 2>/dev/null || true

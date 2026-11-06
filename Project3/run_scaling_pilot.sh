@@ -10,7 +10,8 @@ MAX_ITERS=25
 TOL=1e-5
 MPI_CXX="${MPI_CXX:-mpicxx}"
 MPI_RUN="${MPI_RUN:-mpirun}"
-RESULTS_DIR="${SCALING_PILOT_DIR:-scaling_pilot_results}"
+RESULTS_DIR="${SCALING_PILOT_DIR:-results/scaling_pilot}"
+BIN_DIR="${BIN_DIR:-bin}"
 P=1
 
 for tool in "$MPI_CXX" "$MPI_RUN"; do
@@ -40,12 +41,12 @@ mkdir -p "$RESULTS_DIR"
 
 echo "Compiling heat_mpi_nonblocking_implicit.cpp..."
 "$MPI_CXX" -O3 -std=c++17 heat_mpi_nonblocking_implicit.cpp \
-  -o "$RESULTS_DIR/heat_mpi_nonblocking_implicit"
+  -o "$BIN_DIR/heat_mpi_nonblocking_implicit"
 
 RUN_LOG="$RESULTS_DIR/heat_mpi_nonblocking_N${N}_P${P}_run1.log"
 echo "Running the single pilot..."
 "$MPI_RUN" -np "$P" --map-by ppr:1:node:PE=1 --bind-to core --report-bindings \
-  "$RESULTS_DIR/heat_mpi_nonblocking_implicit" \
+  "$BIN_DIR/heat_mpi_nonblocking_implicit" \
   "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
   > "$RUN_LOG" 2>&1
 

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "result_paths.hpp"
 
 // Original serial implementation: update the global maximum for every cell.
 
@@ -246,13 +247,13 @@ int main(int argc, char* argv[]) {
 
   // Automatically save baseline output files for verification
 #if defined(_WIN32)
-  _mkdir("results");
+  _mkdir(results_directory());
 #else
-  mkdir("results", 0777);
+  mkdir(results_directory(), 0777);
 #endif
 
-  string baselineBin = "results/baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin";
-  string baselineTxt = "results/baseline_implicit_metrics_N" + to_string(N) + "_S" + to_string(STEPS) + ".txt";
+  string baselineBin = result_path("baseline_implicit_N" + to_string(N) + "_S" + to_string(STEPS) + ".bin");
+  string baselineTxt = result_path("baseline_implicit_metrics_N" + to_string(N) + "_S" + to_string(STEPS) + ".txt");
 
   ofstream binFile(baselineBin, ios::binary);
   if (binFile.is_open()) {

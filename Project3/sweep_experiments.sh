@@ -79,6 +79,6 @@ done
 
 echo -e "\n=========================================================="
 echo " Benchmark Sweep Finished Successfully!"
-echo " Results Directory : ./results/"
-echo " Summary CSV Table : ./results/all_results.csv"
+echo " Results Directory : ${RESULTS_DIR:-./results}/"
+echo " Summary CSV Table : ${RESULTS_DIR:-./results}/all_results.csv"
 echo "=========================================================="
