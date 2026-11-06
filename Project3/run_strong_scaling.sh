@@ -39,12 +39,52 @@ for p in "${PROCS[@]}"; do
   fi
 done
 
+PRIOR_CSV="${SCALING_PRIOR_CSV:-}"
+PRESERVED_ROWS="$RESULTS_DIR/.preserved_low_rank_rows.$$"
+BASELINE_MEAN="${SCALING_BASELINE_TIME:-}"
+HAS_P1=false
+HAS_P4=false
+for p in "${PROCS[@]}"; do
+  [ "$p" = "1" ] && HAS_P1=true
+  [ "$p" = "4" ] && HAS_P4=true
+done
+if [ "$HAS_P1" = false ]; then
+  if [ -z "$PRIOR_CSV" ] || [ ! -r "$PRIOR_CSV" ]; then
+    echo "Error: rerunning without P=1 requires SCALING_PRIOR_CSV with completed 1-rank results." >&2
+    exit 2
+  fi
+  if [ -z "$BASELINE_MEAN" ]; then
+    BASELINE_MEAN="$(awk -F, -v n="$N" 'NR>1 && $1==n && $3==1 && $5 ~ /^[0-9.]+$/ {sum+=$5; count++} END {if(count) printf "%.9f", sum/count}' "$PRIOR_CSV")"
+  fi
+  if [ -z "$BASELINE_MEAN" ]; then
+    echo "Error: no completed P=1 timing for N=$N found in $PRIOR_CSV." >&2
+    exit 2
+  fi
+  if [ "$HAS_P4" = false ]; then
+    awk -F, -v n="$N" 'NR>1 && $1==n && $3==1 {print}' "$PRIOR_CSV" > "$PRESERVED_ROWS"
+    awk -F, -v n="$N" 'NR>1 && $1==n && $3==4 {print}' "$PRIOR_CSV" >> "$PRESERVED_ROWS"
+  fi
+fi
+
+# This Vanda Open MPI module does not appear to have its PBS/TM integration
+# library available. Explicitly pass the PBS allocation so mpirun sees slots
+# on every allocated node rather than only the local node.
+MPI_HOST_ARGS=()
+if [ -n "${PBS_NODEFILE:-}" ] && [ -r "$PBS_NODEFILE" ]; then
+  HOSTFILE="$RESULTS_DIR/pbs_hosts.txt"
+  awk '{ if (!($1 in slots)) order[++n]=$1; slots[$1]++ }
+       END { for (i=1; i<=n; i++) printf "%s slots=%d\n", order[i], slots[order[i]] }' \
+    "$PBS_NODEFILE" > "$HOSTFILE"
+  MPI_HOST_ARGS=(--hostfile "$HOSTFILE")
+fi
+
 {
   echo "Strong-scaling sweep started: $(date)"
   echo "Host: $(hostname)"
   echo "PBS job ID: ${PBS_JOBID:-not set}"
   echo "N=$N steps=$STEPS lambda=$LAMBDA max_iters=$MAX_ITERS tol=$TOL"
   echo "MPI rank counts: ${PROCS[*]}"
+  if [ -n "$BASELINE_MEAN" ]; then echo "P=1 baseline mean: $BASELINE_MEAN seconds"; fi
   echo "Repetitions per rank count: $RUNS"
   echo "MPI compiler: $MPI_CXX"
   "$MPI_CXX" --version 2>&1 | head -n 2 || true
@@ -55,6 +95,10 @@ done
   lscpu 2>&1 || true
   echo "Allocated PBS slots: ${PBS_NODEFILE:-not set}"
   if [ -n "${PBS_NODEFILE:-}" ]; then sort "$PBS_NODEFILE" | uniq -c; fi
+  if [ -n "${HOSTFILE:-}" ]; then
+    echo "Open MPI hostfile (explicit PBS allocation): $HOSTFILE"
+    cat "$HOSTFILE"
+  fi
   echo "Loaded modules:"
   module list 2>&1 || true
 } | tee "$RESULTS_DIR/toolchain.txt"
@@ -64,7 +108,10 @@ echo "Compiling $SOURCE ..."
 
 CSV_HEADER="N,steps,mpi_ranks,run,execution_time_s,speedup,efficiency,avg_rank_comp_time_s,max_rank_comp_time_s,avg_rank_comm_time_s,max_rank_comm_time_s,total_jacobi_iters,max_residual"
 echo "$CSV_HEADER" > "$CSV_FILE"
-BASELINE_MEAN=""
+if [ -f "$PRESERVED_ROWS" ]; then
+  cat "$PRESERVED_ROWS" >> "$CSV_FILE"
+  rm -f -- "$PRESERVED_ROWS"
+fi
 
 for P in "${PROCS[@]}"; do
   RUN_TIMES=()
@@ -80,7 +127,7 @@ for P in "${PROCS[@]}"; do
   for ((run=1; run<=RUNS; run++)); do
     LOG_FILE="$RESULTS_DIR/logs/N${N}_P${P}_run${run}_$(date +'%Y%m%d_%H%M%S').log"
     echo "Run $run / $RUNS ..."
-    "$MPI_RUN" -np "$P" --map-by node --bind-to core --report-bindings \
+    "$MPI_RUN" "${MPI_HOST_ARGS[@]}" -np "$P" --map-by node --bind-to core --report-bindings \
       "$BINARY" "$N" "$STEPS" "$LAMBDA" "$MAX_ITERS" "$TOL" \
       > "$LOG_FILE" 2>&1
 
