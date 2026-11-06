@@ -1,0 +1,47 @@
+#!/bin/bash
+# ==============================================================================
+# Weak-scaling sweep: approximately 1,048,576 owned cells per MPI rank.
+# Uses row decomposition + nonblocking MPI at P=1,4,16,32,64,128,256.
+# ============================================================================== 
+
+#PBS -N heat_weak_scaling
+#PBS -l select=4:ncpus=64:mpiprocs=64:mem=32gb
+#PBS -l walltime=02:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+JOB_RESULTS_DIR="results/weak_scaling"
+JOB_BIN_DIR="bin/weak_scaling"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
+export WEAK_CONFIGS="${WEAK_CONFIGS:-1:1024 4:2048 16:4096 32:5792 64:8192 128:11520 256:16384}"
+export WEAK_STEPS="${WEAK_STEPS:-1000}"
+export WEAK_RUNS="${WEAK_RUNS:-5}"
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+fi
+
+if ! command -v mpicxx >/dev/null 2>&1 || ! command -v mpirun >/dev/null 2>&1; then
+  echo "ERROR: mpicxx and mpirun must be available. Load Vanda's compiler/MPI modules."
+  exit 1
+fi
+
+export OMPI_MCA_mpi_yield_when_idle=1
+export PRTE_MCA_mpi_yield_when_idle=1
+
+echo "Weak-scaling job started on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+echo "Allocated slots: $(wc -l < "$PBS_NODEFILE")"
+echo "Configurations P:N: $WEAK_CONFIGS; steps=$WEAK_STEPS; repetitions=$WEAK_RUNS"
+
+chmod +x ./run_weak_scaling.sh
+./run_weak_scaling.sh
+
+echo "Weak-scaling job finished at: $(date)"
+echo "Results: $(pwd)/$JOB_RESULTS_DIR/"
