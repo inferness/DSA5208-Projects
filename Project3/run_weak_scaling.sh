@@ -109,6 +109,8 @@ for config in "${CONFIG_ARRAY[@]}"; do
     if ! awk -v required="$P" 'BEGIN { remaining=required }
       {
         host=$1; available=$2; sub(/^slots=/, "", available)
+        available += 0
+        remaining += 0
         if (remaining > 0) {
           use=(available < remaining) ? available : remaining
           printf "%s slots=%d\n", host, use
@@ -121,6 +123,8 @@ for config in "${CONFIG_ARRAY[@]}"; do
       exit 2
     fi
     MPI_HOST_ARGS=(--hostfile "$HOSTFILE")
+    echo "MPI hostfile for P=$P:"
+    cat "$HOSTFILE"
   fi
 
   RUN_TIMES=()
