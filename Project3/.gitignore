@@ -54,3 +54,7 @@ results/logs/
 /gpu_mapping_results/
 /hybrid_openmp_results/
 /scaling_pilot_results/
+
+# PBS stdout/stderr files created in the project root (for example heat_job.o123456)
+heat_*.o[0-9]*
+test_serial.o[0-9]*
