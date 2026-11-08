@@ -3,17 +3,18 @@
 # PBS Pro batch job script for Vanda CPU experiments
 # ==============================================================================
 
-#PBS -N heat_implicit_cpu
+#PBS -N heat_cpu_intermediate_ranks
 #PBS -l select=1:ncpus=32:mpiprocs=32:mem=32gb
-#PBS -l walltime=02:00:00
+#PBS -l walltime=03:00:00
 #PBS -j oe
-# Let PBS create a unique job output file (heat_implicit_cpu.o<job-number>).
+# Let PBS create a unique heat_cpu_intermediate_ranks.o<job-number> file.
 
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-JOB_RESULTS_DIR="results/cpu_sweep"
-JOB_BIN_DIR="bin/cpu_sweep"
+# Keep the earlier CPU sweep results and binaries untouched.
+JOB_RESULTS_DIR="results/cpu_sweep_intermediate_ranks"
+JOB_BIN_DIR="bin/cpu_sweep_intermediate_ranks"
 rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"

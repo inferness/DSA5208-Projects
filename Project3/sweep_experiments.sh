@@ -23,7 +23,7 @@ RUNS="${3:-5}"
 
 # Target process counts for the requested scaling study.
 # PBS filters this list against the allocated MPI slots below.
-DEFAULT_PROCS="1 2 4 8 16 32"
+DEFAULT_PROCS="1 4 6 8 10"
 
 if [ -n "${PBS_NODEFILE:-}" ] && [ -z "${PROCS_LIST:-}" ]; then
   TOTAL_SLOTS=$(wc -l < "$PBS_NODEFILE")
