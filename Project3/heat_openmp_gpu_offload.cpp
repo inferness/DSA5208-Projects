@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <omp.h>
+#include <set>
 #include <string>
 #include <vector>
 #include "result_paths.hpp"
@@ -103,6 +104,10 @@ int main(int argc, char *argv[]) {
   int nonConvergedSteps = 0;
   double maxResidualOverall = 0.0;
   int maxTeamsObserved = 0;
+  int minTeamsObserved = numeric_limits<int>::max();
+  long long sumTeamsObserved = 0;
+  long long teamLaunchCount = 0;
+  set<int> observedTeamCounts;
 
   const auto start = chrono::steady_clock::now();
   {
@@ -144,7 +149,6 @@ int main(int argc, char *argv[]) {
                 if (diff > maxDiff) maxDiff = diff;
               }
             }
-            maxTeamsObserved = max(maxTeamsObserved, teamsThisLaunch);
             currentIsA = false;
           } else {
 #if GPU_ROW_ONLY
@@ -163,8 +167,18 @@ int main(int argc, char *argv[]) {
                 if (diff > maxDiff) maxDiff = diff;
               }
             }
-            maxTeamsObserved = max(maxTeamsObserved, teamsThisLaunch);
             currentIsA = true;
+          }
+
+          // Sample the runtime-selected number of teams for every Jacobi
+          // kernel launch, so automatic team selection can be compared both
+          // within a run and across repetitions.
+          if (teamsThisLaunch > 0) {
+            minTeamsObserved = min(minTeamsObserved, teamsThisLaunch);
+            maxTeamsObserved = max(maxTeamsObserved, teamsThisLaunch);
+            sumTeamsObserved += teamsThisLaunch;
+            ++teamLaunchCount;
+            observedTeamCounts.insert(teamsThisLaunch);
           }
 
           if (maxDiff < TOL) {
@@ -249,7 +263,11 @@ int main(int argc, char *argv[]) {
   filesystem::create_directories(resultDir);
   const string gpuGridPath = resultDir + "/heat_openmp_gpu_offload_N" +
                              to_string(N) + "_S" + to_string(STEPS) + ".bin";
-  {
+  bool saveGpuGrid = true;
+  if (const char *saveGridEnv = getenv("GPU_SAVE_RESULT_GRID")) {
+    saveGpuGrid = string(saveGridEnv) != "0";
+  }
+  if (saveGpuGrid) {
     ofstream out(gpuGridPath, ios::binary);
     if (!out || !out.write(reinterpret_cast<const char *>(finalGrid),
                            static_cast<streamsize>(cellCount * sizeof(double)))) {
@@ -279,7 +297,27 @@ int main(int argc, char *argv[]) {
   cout << fixed << setprecision(6);
   cout << "========================================================\n";
   cout << "Execution time       : " << elapsed << " seconds\n";
+  cout << "Min teams observed   : "
+       << (teamLaunchCount > 0 ? minTeamsObserved : 0) << "\n";
   cout << "Max teams observed   : " << maxTeamsObserved << "\n";
+  cout << "Mean teams per launch: "
+       << (teamLaunchCount > 0
+               ? static_cast<double>(sumTeamsObserved) / teamLaunchCount
+               : 0.0)
+       << "\n";
+  cout << "Team launches sampled: " << teamLaunchCount << "\n";
+  cout << "Observed team count values: ";
+  if (observedTeamCounts.empty()) {
+    cout << "none";
+  } else {
+    bool firstTeamCount = true;
+    for (int teamCount : observedTeamCounts) {
+      if (!firstTeamCount) cout << "|";
+      cout << teamCount;
+      firstTeamCount = false;
+    }
+  }
+  cout << "\n";
   cout << "Avg Jacobi iters/step: "
        << (STEPS > 0 ? static_cast<double>(totalJacobiIters) / STEPS : 0.0)
        << "\n";
@@ -292,7 +330,9 @@ int main(int argc, char *argv[]) {
   cout << "Maximum Temperature  : " << maxTemperature << "\n";
   cout << "Minimum Temperature  : " << minTemperature << "\n";
   cout << "Total Heat Energy    : " << totalHeat << "\n";
-  cout << "GPU result grid      : " << gpuGridPath << "\n";
+  cout << "GPU result grid      : "
+       << (saveGpuGrid ? gpuGridPath : "not saved (GPU_SAVE_RESULT_GRID=0)")
+       << "\n";
   if (maxBaselineDifference >= 0.0) {
     cout << scientific << "Max difference vs CPU baseline: "
          << maxBaselineDifference << "\n";

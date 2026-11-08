@@ -1,9 +1,9 @@
 #!/bin/bash
 # ==============================================================================
-# OpenMP GPU team-count sweep on Vanda (no MPI)
+# OpenMP GPU grid-size x team-count sweep on Vanda (no MPI)
 # ==============================================================================
 
-#PBS -N heat_omp_gpu_teams
+#PBS -N heat_omp_gpu_size_teams
 #PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
 #PBS -l walltime=02:00:00
 #PBS -j oe
@@ -11,8 +11,9 @@
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-JOB_RESULTS_DIR="results/openmp_gpu_team_sweep"
-JOB_BIN_DIR="bin/openmp_gpu_team_sweep"
+# Keep this experiment separate from the earlier fixed-N team sweep.
+JOB_RESULTS_DIR="results/openmp_gpu_size_team_sweep"
+JOB_BIN_DIR="bin/openmp_gpu_size_team_sweep"
 rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 export RESULTS_DIR="$JOB_RESULTS_DIR" GPU_RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
@@ -42,17 +43,17 @@ export CPU_CXX="${CPU_CXX:-g++}"
 export OMP_TARGET_OFFLOAD=MANDATORY
 export OMP_TEAMS_THREAD_LIMIT=256
 unset OMP_NUM_TEAMS
+export GPU_N_SIZES="${GPU_N_SIZES:-1024 4096 8192 16000}"
 
-echo "GPU team-count sweep allocated on: $(hostname) at $(date)"
+echo "GPU grid-size/team sweep allocated on: $(hostname) at $(date)"
 echo "PBS job ID: ${PBS_JOBID:-N/A}"
 echo "Working directory: $(pwd)"
 module list 2>&1 || true
 if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi -L || true; fi
 
 chmod +x ./run_gpu_team_sweep.sh
-./run_gpu_team_sweep.sh "${GPU_RUNS:-5}" "${GPU_N:-3000}" \
-  "${GPU_STEPS:-1000}" "${GPU_LAMBDA:-0.05}" \
-  "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
+./run_gpu_team_sweep.sh "${GPU_RUNS:-5}" "${GPU_STEPS:-1000}" \
+  "${GPU_LAMBDA:-0.05}" "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
 
-echo "GPU team-count sweep finished at: $(date)"
+echo "GPU grid-size/team sweep finished at: $(date)"
 echo "Results: $(pwd)/$JOB_RESULTS_DIR/"

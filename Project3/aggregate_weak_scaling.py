@@ -83,7 +83,14 @@ def main():
             for source in MEAN_FIELDS:
                 values = [numeric(row[source]) for row in rows]
                 values = [value for value in values if value is not None]
-                output_name = "mean_weak_scaling_efficiency" if source == "weak_scaling_efficiency" else f"mean_{source}"
+                if source == "weak_scaling_efficiency":
+                    output_name = "mean_weak_scaling_efficiency"
+                elif source == "mean_jacobi_iters_per_step":
+                    # This input metric is already a per-run mean; aggregate it
+                    # across runs without adding a redundant second "mean".
+                    output_name = source
+                else:
+                    output_name = f"mean_{source}"
                 result[output_name] = fmt(sum(values) / len(values)) if values else "NA"
 
             times = [float(row["execution_time_s"]) for row in rows]
