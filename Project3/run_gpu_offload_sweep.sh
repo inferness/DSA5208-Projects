@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the 2 x 3 OpenMP GPU mapping/thread-limit experiment matrix.
+# Run 2A plus the thread-limit portion of 2B. Compare mappings at limit 256;
+# use collapse(2) for the three thread-limit configurations.
 # Usage: ./run_gpu_offload_sweep.sh [runs=5] [N=3000] [steps=1000] [lambda=0.05] [max_iters=25] [tol=1e-5]
 
 set -euo pipefail
@@ -73,6 +74,11 @@ echo "thread_limit,mapping,num_teams,runs,mean_time_s,min_time_s,max_time_s,stdd
 
 for THREAD_LIMIT in "${THREAD_LIMITS[@]}"; do
   for MAPPING in "${MAPPINGS[@]}"; do
+    # 2A is a matched mapping comparison at 256 threads. 2B varies the thread
+    # limit only with the selected collapse(2) mapping.
+    if [ "$MAPPING" = "row_only" ] && [ "$THREAD_LIMIT" != "256" ]; then
+      continue
+    fi
     CONFIG_DIR="$GPU_RESULTS_ROOT/thread_limit_${THREAD_LIMIT}/${MAPPING}"
     mkdir -p "$CONFIG_DIR/logs"
     if [ "$MAPPING" = "collapse2" ]; then

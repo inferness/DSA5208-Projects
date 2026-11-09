@@ -1,0 +1,59 @@
+#!/bin/bash
+# ==============================================================================
+# GPU team-count sweep for experiment 2B at N=8192 (no MPI)
+# ==============================================================================
+
+#PBS -N heat_gpu_2b_teams
+#PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
+#PBS -l walltime=02:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+JOB_RESULTS_DIR="results/gpu_2b_teams_n8192"
+JOB_BIN_DIR="bin/gpu_2b_teams_n8192"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" GPU_RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  if ! command -v nvc++ >/dev/null 2>&1; then
+    GPU_COMPILER_MODULE="${GPU_COMPILER_MODULE:-nvhpc}"
+    echo "Loading NVIDIA compiler module: $GPU_COMPILER_MODULE"
+    if ! module load "$GPU_COMPILER_MODULE"; then
+      echo "ERROR: Could not load GPU_COMPILER_MODULE=$GPU_COMPILER_MODULE"
+      module avail nvhpc 2>&1 || true
+      exit 1
+    fi
+  fi
+fi
+
+if ! command -v nvc++ >/dev/null 2>&1; then
+  echo "ERROR: nvc++ is unavailable. Set GPU_COMPILER_MODULE to Vanda's NVIDIA HPC SDK module."
+  if command -v module >/dev/null 2>&1; then module avail 2>&1 || true; fi
+  exit 1
+fi
+
+export GPU_CXX="${GPU_CXX:-nvc++}"
+export GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
+export CPU_CXX="${CPU_CXX:-g++}"
+export OMP_TARGET_OFFLOAD=MANDATORY
+export OMP_TEAMS_THREAD_LIMIT=256
+export GPU_N_SIZES="${GPU_N_SIZES:-8192}"
+# Match the previous 2B team-count experiment: four explicit team counts.
+export GPU_TEAM_SETTINGS="${GPU_TEAM_SETTINGS:-256 512 1024 2048}"
+
+echo "GPU 2B team-count sweep allocated on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+echo "Working directory: $(pwd)"
+module list 2>&1 || true
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi -L || true; fi
+
+chmod +x ./run_gpu_team_sweep.sh
+./run_gpu_team_sweep.sh "${GPU_RUNS:-5}" "${GPU_STEPS:-1000}" \
+  "${GPU_LAMBDA:-0.05}" "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
+
+echo "GPU 2B team-count sweep finished at: $(date)"
+echo "Results: $(pwd)/$JOB_RESULTS_DIR/"

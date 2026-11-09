@@ -31,11 +31,19 @@ def number(value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", nargs="?", default="results/results/all_results.csv")
-    parser.add_argument("output", nargs="?", default="results/results/all_results_aggregated.csv")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        help="output CSV (default: all_results_aggregated.csv beside the input)",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
-    output_path = Path(args.output)
+    output_path = (
+        Path(args.output)
+        if args.output
+        else input_path.with_name("all_results_aggregated.csv")
+    )
     groups = defaultdict(list)
 
     with input_path.open(newline="") as csv_file:

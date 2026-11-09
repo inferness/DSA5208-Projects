@@ -1,18 +1,19 @@
 #!/bin/bash
 # ==============================================================================
-# OpenMP GPU data-mapping comparison on Vanda (no MPI)
+# OpenMP GPU data-mapping comparison for 2C at N=8192 (no MPI)
 # ============================================================================
 
-#PBS -N heat_omp_gpu_map
+#PBS -N heat_gpu_2c_n8192
 #PBS -l select=1:ncpus=8:ngpus=1:mem=32gb
-#PBS -l walltime=02:00:00
+#PBS -l walltime=04:00:00
 #PBS -j oe
 
 set -euo pipefail
 
 cd "$PBS_O_WORKDIR"
-JOB_RESULTS_DIR="results/openmp_gpu_mapping"
-JOB_BIN_DIR="bin/openmp_gpu_mapping"
+# Preserve the earlier N=3000 data-movement experiment.
+JOB_RESULTS_DIR="results/gpu_2c_n8192"
+JOB_BIN_DIR="bin/gpu_2c_n8192"
 rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
 export RESULTS_DIR="$JOB_RESULTS_DIR" GPU_RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
@@ -50,7 +51,7 @@ module list 2>&1 || true
 if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi -L || true; fi
 
 chmod +x ./run_gpu_mapping_sweep.sh
-./run_gpu_mapping_sweep.sh "${GPU_RUNS:-5}" "${GPU_N:-3000}" \
+./run_gpu_mapping_sweep.sh "${GPU_RUNS:-5}" "${GPU_N:-8192}" \
   "${GPU_STEPS:-1000}" "${GPU_LAMBDA:-0.05}" \
   "${GPU_MAX_ITERS:-25}" "${GPU_TOL:-1e-5}"
 

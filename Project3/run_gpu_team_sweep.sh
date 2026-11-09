@@ -16,7 +16,7 @@ CPU_CXX="${CPU_CXX:-g++}"
 GPU_CXXFLAGS="${GPU_CXXFLAGS:--O3 -std=c++17 -mp=gpu -Minfo=mp}"
 GPU_RESULTS_ROOT="${GPU_RESULTS_DIR:-results/openmp_gpu_size_team_sweep}"
 BIN_DIR="${BIN_DIR:-bin/openmp_gpu_size_team_sweep}"
-TEAM_SETTINGS=(auto 256 512 1024)
+read -r -a TEAM_SETTINGS <<< "${GPU_TEAM_SETTINGS:-auto 256 512 1024}"
 THREAD_LIMIT=256
 
 if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ && "$STEPS" =~ ^[0-9]+$ ]]; then
