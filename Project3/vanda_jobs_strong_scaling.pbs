@@ -1,12 +1,12 @@
 #!/bin/bash
 # ==============================================================================
 # Strong-scaling sweep for row decomposition + nonblocking MPI, N=8192.
-# Reuses completed 1- and 4-rank results, reruns 16, 32, 64, 128, and 256.
+# Rerun all ranks so every row has the new communication breakdown metrics.
 # ============================================================================== 
 
 #PBS -N heat_strong_scaling
 #PBS -l select=4:ncpus=64:mpiprocs=64:mem=32gb
-#PBS -l walltime=03:00:00
+#PBS -l walltime=04:00:00
 #PBS -j oe
 
 set -euo pipefail
@@ -20,10 +20,10 @@ export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
 export SCALING_N="${SCALING_N:-8192}"
 export SCALING_STEPS="${SCALING_STEPS:-1000}"
 export SCALING_RUNS="${SCALING_RUNS:-5}"
-export SCALING_PROCS="${SCALING_PROCS:-16 32 64 128 256}"
+export SCALING_PROCS="${SCALING_PROCS:-1 4 16 32 64 128 256}"
 export SCALING_PRIOR_CSV="$JOB_RESULTS_DIR/all_strong_scaling_results.csv"
 
-# Keep the completed P=1 and P=4 results; replace only the rank counts rerun here.
+# Remove prior per-run logs and summaries for each rank count being refreshed.
 read -r -a RERUN_PROCS <<< "$SCALING_PROCS"
 for p in "${RERUN_PROCS[@]}"; do
   rm -f -- "$JOB_RESULTS_DIR"/logs/N${SCALING_N}_P${p}_run*.log

@@ -85,7 +85,7 @@ fi
 echo "Compiling $SOURCE ..."
 "$MPI_CXX" -O3 -std=c++17 "$SOURCE" -o "$BINARY"
 
-CSV_HEADER="N,steps,mpi_ranks,local_rows_per_rank,owned_cells_per_rank,min_active_cells_per_rank,max_active_cells_per_rank,target_cells_per_rank,target_error_pct,run,execution_time_s,weak_scaling_efficiency,avg_rank_comp_time_s,max_rank_comp_time_s,avg_rank_comm_time_s,max_rank_comm_time_s,total_jacobi_iters,mean_jacobi_iters_per_step,global_cell_updates_per_s,max_residual"
+CSV_HEADER="N,steps,mpi_ranks,local_rows_per_rank,owned_cells_per_rank,min_active_cells_per_rank,max_active_cells_per_rank,target_cells_per_rank,target_error_pct,run,execution_time_s,weak_scaling_efficiency,avg_rank_comp_time_s,avg_rank_comm_time_s,avg_rank_halo_exchange_time_s,avg_rank_halo_post_time_s,avg_rank_halo_wait_time_s,avg_rank_allreduce_time_s,total_jacobi_iters,mean_jacobi_iters_per_step,global_cell_updates_per_s,max_residual"
 echo "$CSV_HEADER" > "$CSV_FILE"
 BASELINE_MEAN=""
 
@@ -129,9 +129,11 @@ for config in "${CONFIG_ARRAY[@]}"; do
 
   RUN_TIMES=()
   RUN_AVG_COMP=()
-  RUN_MAX_COMP=()
   RUN_AVG_COMM=()
-  RUN_MAX_COMM=()
+  RUN_AVG_HALO_EXCHANGE=()
+  RUN_AVG_HALO_POST=()
+  RUN_AVG_HALO_WAIT=()
+  RUN_AVG_ALLREDUCE=()
   RUN_ITERS=()
   RUN_RESIDUALS=()
 
@@ -146,13 +148,17 @@ for config in "${CONFIG_ARRAY[@]}"; do
 
     TIME_VAL="$(awk -F: '/^Execution time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     AVG_COMP_VAL="$(awk -F: 'tolower($1) ~ /average computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-    MAX_COMP_VAL="$(awk -F: 'tolower($1) ~ /maximum computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     AVG_COMM_VAL="$(awk -F: 'tolower($1) ~ /average communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-    MAX_COMM_VAL="$(awk -F: 'tolower($1) ~ /maximum communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_EXCHANGE_VAL="$(awk -F: 'tolower($1) ~ /average halo exchange time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_POST_VAL="$(awk -F: 'tolower($1) ~ /average halo post time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_WAIT_VAL="$(awk -F: 'tolower($1) ~ /average halo wait time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_ALLREDUCE_VAL="$(awk -F: 'tolower($1) ~ /average mpi_allreduce time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     ITERS_VAL="$(awk -F: '/^Total Jacobi iters/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$LOG_FILE")"
     RESIDUAL_VAL="$(awk -F: '/^Max absolute residual/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$LOG_FILE")"
-    if [ -z "$TIME_VAL" ] || [ -z "$AVG_COMP_VAL" ] || [ -z "$MAX_COMP_VAL" ] ||
-       [ -z "$AVG_COMM_VAL" ] || [ -z "$MAX_COMM_VAL" ] ||
+    if [ -z "$TIME_VAL" ] || [ -z "$AVG_COMP_VAL" ] ||
+       [ -z "$AVG_COMM_VAL" ] || [ -z "$AVG_HALO_EXCHANGE_VAL" ] ||
+       [ -z "$AVG_HALO_POST_VAL" ] || [ -z "$AVG_HALO_WAIT_VAL" ] ||
+       [ -z "$AVG_ALLREDUCE_VAL" ] ||
        [ -z "$ITERS_VAL" ] || [ -z "$RESIDUAL_VAL" ]; then
       cat "$LOG_FILE"
       echo "Error: timing or validation fields missing in $LOG_FILE" >&2
@@ -161,12 +167,14 @@ for config in "${CONFIG_ARRAY[@]}"; do
 
     RUN_TIMES+=("$TIME_VAL")
     RUN_AVG_COMP+=("$AVG_COMP_VAL")
-    RUN_MAX_COMP+=("$MAX_COMP_VAL")
     RUN_AVG_COMM+=("$AVG_COMM_VAL")
-    RUN_MAX_COMM+=("$MAX_COMM_VAL")
+    RUN_AVG_HALO_EXCHANGE+=("$AVG_HALO_EXCHANGE_VAL")
+    RUN_AVG_HALO_POST+=("$AVG_HALO_POST_VAL")
+    RUN_AVG_HALO_WAIT+=("$AVG_HALO_WAIT_VAL")
+    RUN_AVG_ALLREDUCE+=("$AVG_ALLREDUCE_VAL")
     RUN_ITERS+=("$ITERS_VAL")
     RUN_RESIDUALS+=("$RESIDUAL_VAL")
-    echo "  elapsed=$TIME_VAL s; compute avg/max=$AVG_COMP_VAL/$MAX_COMP_VAL s; comm avg/max=$AVG_COMM_VAL/$MAX_COMM_VAL s"
+    echo "  elapsed=$TIME_VAL s; mean-rank computation=$AVG_COMP_VAL s; communication=$AVG_COMM_VAL s; halo exchange=$AVG_HALO_EXCHANGE_VAL s; post=$AVG_HALO_POST_VAL s; exposed wait=$AVG_HALO_WAIT_VAL s; allreduce=$AVG_ALLREDUCE_VAL s"
   done
 
   P_MEAN="$(printf '%s\n' "${RUN_TIMES[@]}" | awk '{sum+=$1} END {printf "%.9f",sum/NR}')"
@@ -178,7 +186,7 @@ for config in "${CONFIG_ARRAY[@]}"; do
     WEAK_EFFICIENCY="$(awk -v b="$BASELINE_MEAN" -v t="${RUN_TIMES[$i]}" 'BEGIN {if(t>0) printf "%.6f",b/t; else print "NA"}')"
     MEAN_ITERS_PER_STEP="$(awk -v i="${RUN_ITERS[$i]}" -v s="$STEPS" 'BEGIN {if(s>0) printf "%.6f",i/s; else print "NA"}')"
     CELL_UPDATES_PER_SEC="$(awk -v n="$N" -v it="${RUN_ITERS[$i]}" -v t="${RUN_TIMES[$i]}" 'BEGIN {if(t>0) printf "%.6e",((n-2)*(n-2)*it)/t; else print "NA"}')"
-    echo "$N,$STEPS,$P,$LOCAL_ROWS,$OWNED_CELLS,$MIN_ACTIVE_CELLS,$MAX_ACTIVE_CELLS,$TARGET_CELLS,$TARGET_ERROR,$((i+1)),${RUN_TIMES[$i]},$WEAK_EFFICIENCY,${RUN_AVG_COMP[$i]},${RUN_MAX_COMP[$i]},${RUN_AVG_COMM[$i]},${RUN_MAX_COMM[$i]},${RUN_ITERS[$i]},$MEAN_ITERS_PER_STEP,$CELL_UPDATES_PER_SEC,${RUN_RESIDUALS[$i]}" >> "$CSV_FILE"
+    echo "$N,$STEPS,$P,$LOCAL_ROWS,$OWNED_CELLS,$MIN_ACTIVE_CELLS,$MAX_ACTIVE_CELLS,$TARGET_CELLS,$TARGET_ERROR,$((i+1)),${RUN_TIMES[$i]},$WEAK_EFFICIENCY,${RUN_AVG_COMP[$i]},${RUN_AVG_COMM[$i]},${RUN_AVG_HALO_EXCHANGE[$i]},${RUN_AVG_HALO_POST[$i]},${RUN_AVG_HALO_WAIT[$i]},${RUN_AVG_ALLREDUCE[$i]},${RUN_ITERS[$i]},$MEAN_ITERS_PER_STEP,$CELL_UPDATES_PER_SEC,${RUN_RESIDUALS[$i]}" >> "$CSV_FILE"
   done
 
   {

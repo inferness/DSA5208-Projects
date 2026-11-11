@@ -40,7 +40,7 @@ TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 EXPERIMENT_ID="${EXPERIMENT_ID:-${BASE_NAME}_p${MPI_RANKS}}"
 CSV_FILE="$RESULTS_DIR/all_results.csv"
 SUMMARY_FILE="$RESULTS_DIR/${EXPERIMENT_ID}_summary.txt"
-CSV_HEADER="timestamp,experiment,source_file,mpi_ranks,run,execution_time_s,speedup,efficiency,avg_rank_comp_time_s,max_rank_comp_time_s,avg_rank_comm_time_s,max_rank_comm_time_s"
+CSV_HEADER="timestamp,experiment,source_file,mpi_ranks,run,execution_time_s,speedup,efficiency,avg_rank_comp_time_s,avg_rank_comm_time_s,avg_rank_halo_exchange_time_s,avg_rank_halo_post_time_s,avg_rank_halo_wait_time_s,avg_rank_allreduce_time_s"
 if [ -f "$CSV_FILE" ]; then
   EXISTING_HEADER="$(head -n 1 "$CSV_FILE")"
   if [ "$EXISTING_HEADER" != "$CSV_HEADER" ]; then
@@ -63,9 +63,11 @@ echo "=========================================================="
 
 RUN_TIMES=()
 RUN_AVG_COMP=()
-RUN_MAX_COMP=()
 RUN_AVG_COMM=()
-RUN_MAX_COMM=()
+RUN_AVG_HALO_EXCHANGE=()
+RUN_AVG_HALO_POST=()
+RUN_AVG_HALO_WAIT=()
+RUN_AVG_ALLREDUCE=()
 SERIAL_TIME_FILE="$RESULTS_DIR/optimized_serial_baseline_time.txt"
 SOURCE_BASE="$(basename "$SOURCE")"
 
@@ -85,18 +87,22 @@ for ((run=1; run<=RUNS; run++)); do
 
   TIME_VAL="$(grep -i '^Execution time' "$LOG_FILE" | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)"
   AVG_COMP_VAL="$(awk -F: 'tolower($1) ~ /average computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-  MAX_COMP_VAL="$(awk -F: 'tolower($1) ~ /maximum computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
   AVG_COMM_VAL="$(awk -F: 'tolower($1) ~ /average communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-  MAX_COMM_VAL="$(awk -F: 'tolower($1) ~ /maximum communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+  AVG_HALO_EXCHANGE_VAL="$(awk -F: 'tolower($1) ~ /average halo exchange time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+  AVG_HALO_POST_VAL="$(awk -F: 'tolower($1) ~ /average halo post time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+  AVG_HALO_WAIT_VAL="$(awk -F: 'tolower($1) ~ /average halo wait time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+  AVG_ALLREDUCE_VAL="$(awk -F: 'tolower($1) ~ /average mpi_allreduce time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
   if [ -z "$TIME_VAL" ]; then
     cat "$LOG_FILE"
     echo "Error: no execution time found in $LOG_FILE" >&2
     exit 1
   fi
   AVG_COMP_VAL="${AVG_COMP_VAL:-NA}"
-  MAX_COMP_VAL="${MAX_COMP_VAL:-NA}"
   AVG_COMM_VAL="${AVG_COMM_VAL:-NA}"
-  MAX_COMM_VAL="${MAX_COMM_VAL:-NA}"
+  AVG_HALO_EXCHANGE_VAL="${AVG_HALO_EXCHANGE_VAL:-NA}"
+  AVG_HALO_POST_VAL="${AVG_HALO_POST_VAL:-NA}"
+  AVG_HALO_WAIT_VAL="${AVG_HALO_WAIT_VAL:-NA}"
+  AVG_ALLREDUCE_VAL="${AVG_ALLREDUCE_VAL:-NA}"
 
   SPEEDUP="N/A"
   EFFICIENCY="N/A"
@@ -109,13 +115,15 @@ for ((run=1; run<=RUNS; run++)); do
     EFFICIENCY="$(awk -v s="$SERIAL_TIME" -v t="$TIME_VAL" -v p="$MPI_RANKS" 'BEGIN {if(t>0&&p>0) printf "%.2f%%",100*s/(t*p); else print "N/A"}')"
   fi
 
-  echo "${TIMESTAMP},${EXPERIMENT_ID},${SOURCE},${MPI_RANKS},${run},${TIME_VAL},${SPEEDUP},${EFFICIENCY},${AVG_COMP_VAL},${MAX_COMP_VAL},${AVG_COMM_VAL},${MAX_COMM_VAL}" >> "$CSV_FILE"
+  echo "${TIMESTAMP},${EXPERIMENT_ID},${SOURCE},${MPI_RANKS},${run},${TIME_VAL},${SPEEDUP},${EFFICIENCY},${AVG_COMP_VAL},${AVG_COMM_VAL},${AVG_HALO_EXCHANGE_VAL},${AVG_HALO_POST_VAL},${AVG_HALO_WAIT_VAL},${AVG_ALLREDUCE_VAL}" >> "$CSV_FILE"
   RUN_TIMES+=("$TIME_VAL")
   RUN_AVG_COMP+=("$AVG_COMP_VAL")
-  RUN_MAX_COMP+=("$MAX_COMP_VAL")
   RUN_AVG_COMM+=("$AVG_COMM_VAL")
-  RUN_MAX_COMM+=("$MAX_COMM_VAL")
-  echo "  elapsed=$TIME_VAL s | avg/max comp=$AVG_COMP_VAL/$MAX_COMP_VAL s | avg/max comm=$AVG_COMM_VAL/$MAX_COMM_VAL s"
+  RUN_AVG_HALO_EXCHANGE+=("$AVG_HALO_EXCHANGE_VAL")
+  RUN_AVG_HALO_POST+=("$AVG_HALO_POST_VAL")
+  RUN_AVG_HALO_WAIT+=("$AVG_HALO_WAIT_VAL")
+  RUN_AVG_ALLREDUCE+=("$AVG_ALLREDUCE_VAL")
+  echo "  elapsed=$TIME_VAL s | mean comm=$AVG_COMM_VAL s | halo exchange=$AVG_HALO_EXCHANGE_VAL s | halo post=$AVG_HALO_POST_VAL s | exposed wait=$AVG_HALO_WAIT_VAL s | allreduce=$AVG_ALLREDUCE_VAL s"
 done
 
 mean_numeric() {
@@ -131,15 +139,18 @@ median_numeric() {
   echo "Problem: N=$N, steps=$STEPS, lambda=$LAMBDA, max_iters=$MAX_ITERS, tol=$TOL"
   echo "Per-run values (seconds):"
   for ((i=0; i<${#RUN_TIMES[@]}; i++)); do
-    printf "  run=%d elapsed=%s avg_rank_comp=%s max_rank_comp=%s avg_rank_comm=%s max_rank_comm=%s\n" \
-      "$((i+1))" "${RUN_TIMES[$i]}" "${RUN_AVG_COMP[$i]}" "${RUN_MAX_COMP[$i]}" "${RUN_AVG_COMM[$i]}" "${RUN_MAX_COMM[$i]}"
+    printf "  run=%d elapsed=%s mean_rank_comp=%s mean_rank_comm=%s halo_exchange=%s halo_post=%s halo_wait=%s allreduce=%s\n" \
+      "$((i+1))" "${RUN_TIMES[$i]}" "${RUN_AVG_COMP[$i]}" "${RUN_AVG_COMM[$i]}" \
+      "${RUN_AVG_HALO_EXCHANGE[$i]}" "${RUN_AVG_HALO_POST[$i]}" "${RUN_AVG_HALO_WAIT[$i]}" "${RUN_AVG_ALLREDUCE[$i]}"
   done
   echo "Mean execution: $(mean_numeric "${RUN_TIMES[@]}") s"
   echo "Median execution: $(median_numeric "${RUN_TIMES[@]}") s"
   echo "Mean of per-run average-rank computation: $(mean_numeric "${RUN_AVG_COMP[@]}") s"
-  echo "Mean of per-run maximum-rank computation: $(mean_numeric "${RUN_MAX_COMP[@]}") s"
   echo "Mean of per-run average-rank communication: $(mean_numeric "${RUN_AVG_COMM[@]}") s"
-  echo "Mean of per-run maximum-rank communication: $(mean_numeric "${RUN_MAX_COMM[@]}") s"
+  echo "Mean halo exchange per rank: $(mean_numeric "${RUN_AVG_HALO_EXCHANGE[@]}") s"
+  echo "Mean halo post per rank: $(mean_numeric "${RUN_AVG_HALO_POST[@]}") s"
+  echo "Mean exposed halo wait per rank: $(mean_numeric "${RUN_AVG_HALO_WAIT[@]}") s"
+  echo "Mean MPI_Allreduce per rank: $(mean_numeric "${RUN_AVG_ALLREDUCE[@]}") s"
   echo "Raw per-run CSV: $CSV_FILE"
   echo "Run logs: $LOGS_DIR/"
 } > "$SUMMARY_FILE"

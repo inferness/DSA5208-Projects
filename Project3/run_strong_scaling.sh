@@ -61,8 +61,19 @@ if [ "$HAS_P1" = false ]; then
     exit 2
   fi
   if [ "$HAS_P4" = false ]; then
-    awk -F, -v n="$N" 'NR>1 && $1==n && $3==1 {print}' "$PRIOR_CSV" > "$PRESERVED_ROWS"
-    awk -F, -v n="$N" 'NR>1 && $1==n && $3==4 {print}' "$PRIOR_CSV" >> "$PRESERVED_ROWS"
+    # Convert older CSV schemas to the current mean-only timing schema.
+    awk -F, -v n="$N" '
+      NR>1 && $1==n && ($3==1 || $3==4) {
+        if (NF == 15) { print; next }
+        if (NF == 21) {
+          printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", $1,$2,$3,$4,$5,$6,$7,$8,$10,$12,$14,$16,$18,$20,$21
+          next
+        }
+        if (NF == 13) {
+          printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,NA,NA,NA,NA,%s,%s\n", $1,$2,$3,$4,$5,$6,$7,$8,$10,$12,$13
+        }
+      }
+    ' "$PRIOR_CSV" > "$PRESERVED_ROWS"
   fi
 fi
 
@@ -106,7 +117,7 @@ fi
 echo "Compiling $SOURCE ..."
 "$MPI_CXX" -O3 -std=c++17 "$SOURCE" -o "$BINARY"
 
-CSV_HEADER="N,steps,mpi_ranks,run,execution_time_s,speedup,efficiency,avg_rank_comp_time_s,max_rank_comp_time_s,avg_rank_comm_time_s,max_rank_comm_time_s,total_jacobi_iters,max_residual"
+CSV_HEADER="N,steps,mpi_ranks,run,execution_time_s,speedup,efficiency,avg_rank_comp_time_s,avg_rank_comm_time_s,avg_rank_halo_exchange_time_s,avg_rank_halo_post_time_s,avg_rank_halo_wait_time_s,avg_rank_allreduce_time_s,total_jacobi_iters,max_residual"
 echo "$CSV_HEADER" > "$CSV_FILE"
 if [ -f "$PRESERVED_ROWS" ]; then
   cat "$PRESERVED_ROWS" >> "$CSV_FILE"
@@ -116,9 +127,11 @@ fi
 for P in "${PROCS[@]}"; do
   RUN_TIMES=()
   RUN_AVG_COMP=()
-  RUN_MAX_COMP=()
   RUN_AVG_COMM=()
-  RUN_MAX_COMM=()
+  RUN_AVG_HALO_EXCHANGE=()
+  RUN_AVG_HALO_POST=()
+  RUN_AVG_HALO_WAIT=()
+  RUN_AVG_ALLREDUCE=()
   RUN_ITERS=()
   RUN_RESIDUALS=()
 
@@ -133,13 +146,17 @@ for P in "${PROCS[@]}"; do
 
     TIME_VAL="$(awk -F: '/^Execution time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     AVG_COMP_VAL="$(awk -F: 'tolower($1) ~ /average computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-    MAX_COMP_VAL="$(awk -F: 'tolower($1) ~ /maximum computation time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     AVG_COMM_VAL="$(awk -F: 'tolower($1) ~ /average communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
-    MAX_COMM_VAL="$(awk -F: 'tolower($1) ~ /maximum communication time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_EXCHANGE_VAL="$(awk -F: 'tolower($1) ~ /average halo exchange time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_POST_VAL="$(awk -F: 'tolower($1) ~ /average halo post time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_HALO_WAIT_VAL="$(awk -F: 'tolower($1) ~ /average halo wait time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
+    AVG_ALLREDUCE_VAL="$(awk -F: 'tolower($1) ~ /average mpi_allreduce time/ {gsub(/ seconds.*/, "", $2); gsub(/^[[:space:]]+/, "", $2); print $2; exit}' "$LOG_FILE")"
     ITERS_VAL="$(awk -F: '/^Total Jacobi iters/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$LOG_FILE")"
     RESIDUAL_VAL="$(awk -F: '/^Max absolute residual/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$LOG_FILE")"
-    if [ -z "$TIME_VAL" ] || [ -z "$AVG_COMP_VAL" ] || [ -z "$MAX_COMP_VAL" ] ||
-       [ -z "$AVG_COMM_VAL" ] || [ -z "$MAX_COMM_VAL" ] ||
+    if [ -z "$TIME_VAL" ] || [ -z "$AVG_COMP_VAL" ] ||
+       [ -z "$AVG_COMM_VAL" ] || [ -z "$AVG_HALO_EXCHANGE_VAL" ] ||
+       [ -z "$AVG_HALO_POST_VAL" ] || [ -z "$AVG_HALO_WAIT_VAL" ] ||
+       [ -z "$AVG_ALLREDUCE_VAL" ] ||
        [ -z "$ITERS_VAL" ] || [ -z "$RESIDUAL_VAL" ]; then
       cat "$LOG_FILE"
       echo "Error: timing or validation fields missing in $LOG_FILE" >&2
@@ -148,12 +165,14 @@ for P in "${PROCS[@]}"; do
 
     RUN_TIMES+=("$TIME_VAL")
     RUN_AVG_COMP+=("$AVG_COMP_VAL")
-    RUN_MAX_COMP+=("$MAX_COMP_VAL")
     RUN_AVG_COMM+=("$AVG_COMM_VAL")
-    RUN_MAX_COMM+=("$MAX_COMM_VAL")
+    RUN_AVG_HALO_EXCHANGE+=("$AVG_HALO_EXCHANGE_VAL")
+    RUN_AVG_HALO_POST+=("$AVG_HALO_POST_VAL")
+    RUN_AVG_HALO_WAIT+=("$AVG_HALO_WAIT_VAL")
+    RUN_AVG_ALLREDUCE+=("$AVG_ALLREDUCE_VAL")
     RUN_ITERS+=("$ITERS_VAL")
     RUN_RESIDUALS+=("$RESIDUAL_VAL")
-    echo "  elapsed=$TIME_VAL s; avg/max rank compute=$AVG_COMP_VAL/$MAX_COMP_VAL s; avg/max rank comm=$AVG_COMM_VAL/$MAX_COMM_VAL s"
+    echo "  elapsed=$TIME_VAL s; mean halo exchange=$AVG_HALO_EXCHANGE_VAL s; post=$AVG_HALO_POST_VAL s; wait=$AVG_HALO_WAIT_VAL s; allreduce=$AVG_ALLREDUCE_VAL s"
   done
 
   P_MEAN="$(printf '%s\n' "${RUN_TIMES[@]}" | awk '{sum+=$1} END {printf "%.9f", sum/NR}')"
@@ -161,7 +180,7 @@ for P in "${PROCS[@]}"; do
   for ((i=0; i<${#RUN_TIMES[@]}; i++)); do
     SPEEDUP="$(awk -v b="$BASELINE_MEAN" -v t="${RUN_TIMES[$i]}" 'BEGIN {if(t>0) printf "%.6f", b/t; else print "NA"}')"
     EFFICIENCY="$(awk -v s="$SPEEDUP" -v p="$P" 'BEGIN {if(s!="NA" && p>0) printf "%.6f", s/p; else print "NA"}')"
-    echo "$N,$STEPS,$P,$((i+1)),${RUN_TIMES[$i]},$SPEEDUP,$EFFICIENCY,${RUN_AVG_COMP[$i]},${RUN_MAX_COMP[$i]},${RUN_AVG_COMM[$i]},${RUN_MAX_COMM[$i]},${RUN_ITERS[$i]},${RUN_RESIDUALS[$i]}" >> "$CSV_FILE"
+    echo "$N,$STEPS,$P,$((i+1)),${RUN_TIMES[$i]},$SPEEDUP,$EFFICIENCY,${RUN_AVG_COMP[$i]},${RUN_AVG_COMM[$i]},${RUN_AVG_HALO_EXCHANGE[$i]},${RUN_AVG_HALO_POST[$i]},${RUN_AVG_HALO_WAIT[$i]},${RUN_AVG_ALLREDUCE[$i]},${RUN_ITERS[$i]},${RUN_RESIDUALS[$i]}" >> "$CSV_FILE"
   done
 
   {

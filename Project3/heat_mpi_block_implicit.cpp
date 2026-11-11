@@ -150,6 +150,13 @@ int main(int argc, char *argv[]) {
   double localMaxResidualOverall = 0.0;
   double local_comp_time = 0.0;
   double local_comm_time = 0.0;
+  // MPI communication breakdown. Nonblocking implementations separate request
+  // posting from exposed MPI_Waitall time; these timers do not measure hidden
+  // transfer progress during computation.
+  double local_halo_exchange_time = 0.0;
+  double local_halo_post_time = 0.0;
+  double local_halo_wait_time = 0.0;
+  double local_allreduce_time = 0.0;
 
   for (int t = 0; t < STEPS; t++) {
     bool converged = false;
@@ -179,7 +186,9 @@ int main(int argc, char *argv[]) {
       MPI_Sendrecv(&u_curr[idx(1, localCols)], 1, col_type, right, 3,
                    &u_curr[idx(1, 0)], 1, col_type, left, 3,
                    cart_comm, MPI_STATUS_IGNORE);
-      local_comm_time += (MPI_Wtime() - t_comm0);
+      double haloExchangeElapsed = MPI_Wtime() - t_comm0;
+      local_comm_time += haloExchangeElapsed;
+      local_halo_exchange_time += haloExchangeElapsed;
 
       double t_comp0 = MPI_Wtime();
       double localMaxDiff = 0.0;
@@ -218,7 +227,9 @@ int main(int argc, char *argv[]) {
       MPI_Allreduce(&localMaxDiff, &globalMaxDiff, 1, MPI_DOUBLE, MPI_MAX,
                     cart_comm);
       lastGlobalMaxDiff = globalMaxDiff;
-      local_comm_time += (MPI_Wtime() - t_comm1);
+      double allreduceElapsed = MPI_Wtime() - t_comm1;
+      local_comm_time += allreduceElapsed;
+      local_allreduce_time += allreduceElapsed;
 
       if (globalMaxDiff < TOL) {
         converged = true;
@@ -259,7 +270,9 @@ int main(int argc, char *argv[]) {
       MPI_Sendrecv(&u_curr[idx(1, localCols)], 1, col_type, right, 3,
                    &u_curr[idx(1, 0)], 1, col_type, left, 3,
                    cart_comm, MPI_STATUS_IGNORE);
-      local_comm_time += (MPI_Wtime() - t_comm_res);
+      double residualHaloExchangeElapsed = MPI_Wtime() - t_comm_res;
+      local_comm_time += residualHaloExchangeElapsed;
+      local_halo_exchange_time += residualHaloExchangeElapsed;
 
       double t_comp_res = MPI_Wtime();
       double stepLocalMaxResidual = 0.0;
@@ -292,12 +305,16 @@ int main(int argc, char *argv[]) {
   double maxTime = 0.0;
   MPI_Reduce(&localTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
 
-  double maxCompTime = 0.0, maxCommTime = 0.0;
   double sumCompTime = 0.0, sumCommTime = 0.0;
-  MPI_Reduce(&local_comp_time, &maxCompTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
-  MPI_Reduce(&local_comm_time, &maxCommTime, 1, MPI_DOUBLE, MPI_MAX, 0, cart_comm);
   MPI_Reduce(&local_comp_time, &sumCompTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
   MPI_Reduce(&local_comm_time, &sumCommTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
+
+  double sumHaloExchangeTime = 0.0, sumHaloPostTime = 0.0;
+  double sumHaloWaitTime = 0.0, sumAllreduceTime = 0.0;
+  MPI_Reduce(&local_halo_exchange_time, &sumHaloExchangeTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
+  MPI_Reduce(&local_halo_post_time, &sumHaloPostTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
+  MPI_Reduce(&local_halo_wait_time, &sumHaloWaitTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
+  MPI_Reduce(&local_allreduce_time, &sumAllreduceTime, 1, MPI_DOUBLE, MPI_SUM, 0, cart_comm);
 
   // Global reduction of maximum absolute residual
   double globalMaxResidual = 0.0;
@@ -342,9 +359,11 @@ int main(int argc, char *argv[]) {
     cout << "========================================================\n";
     cout << "Execution time       : " << fixed << setprecision(6) << maxTime << " seconds\n";
     cout << "Average computation time: " << fixed << setprecision(6) << sumCompTime / size << " seconds\n";
-    cout << "Maximum computation time: " << maxCompTime << " seconds\n";
     cout << "Average communication time: " << sumCommTime / size << " seconds\n";
-    cout << "Maximum communication time: " << maxCommTime << " seconds\n";
+    cout << "Average halo exchange time: " << sumHaloExchangeTime / size << " seconds\n";
+    cout << "Average halo post time: " << sumHaloPostTime / size << " seconds\n";
+    cout << "Average halo wait time: " << sumHaloWaitTime / size << " seconds\n";
+    cout << "Average MPI_Allreduce time: " << sumAllreduceTime / size << " seconds\n";
     cout << fixed << setprecision(6);
     if (STEPS > 0) {
       cout << "Time per time step   : " << (maxTime / STEPS) * 1000.0

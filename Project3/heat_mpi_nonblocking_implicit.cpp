@@ -94,6 +94,13 @@ int main(int argc, char *argv[]) {
   double localMaxResidualOverall = 0.0;
   double local_comp_time = 0.0;
   double local_comm_time = 0.0;
+  // MPI communication breakdown. Nonblocking implementations separate request
+  // posting from exposed MPI_Waitall time; these timers do not measure hidden
+  // transfer progress during computation.
+  double local_halo_exchange_time = 0.0;
+  double local_halo_post_time = 0.0;
+  double local_halo_wait_time = 0.0;
+  double local_allreduce_time = 0.0;
 
   for (int t = 0; t < STEPS; t++) {
     int iter = 0;
@@ -107,7 +114,9 @@ int main(int argc, char *argv[]) {
       // 2. Post non-blocking sends of boundary rows
       MPI_Isend(&u_curr[idx(1, 0, N)], N, MPI_DOUBLE, up, 0, MPI_COMM_WORLD, &reqs[2]);
       MPI_Isend(&u_curr[idx(localRows, 0, N)], N, MPI_DOUBLE, down, 1, MPI_COMM_WORLD, &reqs[3]);
-      local_comm_time += (MPI_Wtime() - t_comm0);
+      double haloPostElapsed = MPI_Wtime() - t_comm0;
+      local_comm_time += haloPostElapsed;
+      local_halo_post_time += haloPostElapsed;
 
       double t_comp0 = MPI_Wtime();
       double localMaxDiff = 0.0;
@@ -140,7 +149,9 @@ int main(int argc, char *argv[]) {
       // 4. Wait for non-blocking halo exchanges to complete
       double t_wait = MPI_Wtime();
       MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE);
-      local_comm_time += (MPI_Wtime() - t_wait);
+      double haloWaitElapsed = MPI_Wtime() - t_wait;
+      local_comm_time += haloWaitElapsed;
+      local_halo_wait_time += haloWaitElapsed;
 
       double t_comp1 = MPI_Wtime();
       // 5. Update top boundary row (i = 1) using newly arrived top halo
@@ -197,7 +208,9 @@ int main(int argc, char *argv[]) {
       double t_comm1 = MPI_Wtime();
       double globalMaxDiff = 0.0;
       MPI_Allreduce(&localMaxDiff, &globalMaxDiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-      local_comm_time += (MPI_Wtime() - t_comm1);
+      double allreduceElapsed = MPI_Wtime() - t_comm1;
+      local_comm_time += allreduceElapsed;
+      local_allreduce_time += allreduceElapsed;
 
       if (globalMaxDiff < TOL) {
         iter++;
@@ -240,12 +253,16 @@ int main(int argc, char *argv[]) {
   double maxTime = 0.0;
   MPI_Reduce(&localTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-  double maxCompTime = 0.0, maxCommTime = 0.0;
   double sumCompTime = 0.0, sumCommTime = 0.0;
-  MPI_Reduce(&local_comp_time, &maxCompTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&local_comm_time, &maxCommTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
   MPI_Reduce(&local_comp_time, &sumCompTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&local_comm_time, &sumCommTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  double sumHaloExchangeTime = 0.0, sumHaloPostTime = 0.0;
+  double sumHaloWaitTime = 0.0, sumAllreduceTime = 0.0;
+  MPI_Reduce(&local_halo_exchange_time, &sumHaloExchangeTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_halo_post_time, &sumHaloPostTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_halo_wait_time, &sumHaloWaitTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_allreduce_time, &sumAllreduceTime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
   double globalMaxResidual = 0.0;
   MPI_Reduce(&localMaxResidualOverall, &globalMaxResidual, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -280,9 +297,11 @@ int main(int argc, char *argv[]) {
     cout << "========================================================\n";
     cout << "Execution time       : " << fixed << setprecision(6) << maxTime << " seconds\n";
     cout << "Average computation time: " << fixed << setprecision(6) << sumCompTime / size << " seconds\n";
-    cout << "Maximum computation time: " << maxCompTime << " seconds\n";
     cout << "Average communication time: " << sumCommTime / size << " seconds\n";
-    cout << "Maximum communication time: " << maxCommTime << " seconds\n";
+    cout << "Average halo exchange time: " << sumHaloExchangeTime / size << " seconds\n";
+    cout << "Average halo post time: " << sumHaloPostTime / size << " seconds\n";
+    cout << "Average halo wait time: " << sumHaloWaitTime / size << " seconds\n";
+    cout << "Average MPI_Allreduce time: " << sumAllreduceTime / size << " seconds\n";
     cout << fixed << setprecision(6);
     if (STEPS > 0) {
       cout << "Time per time step   : " << (maxTime / STEPS) * 1000.0 << " ms\n";
