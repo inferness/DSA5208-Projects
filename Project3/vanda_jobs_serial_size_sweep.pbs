@@ -1,0 +1,43 @@
+#!/bin/bash
+# ==============================================================================
+# Serial optimized/unoptimized grid-size sweep on Vanda
+# ==============================================================================
+
+#PBS -N heat_serial_size
+# Reserve 16 CPUs as requested; each serial benchmark still runs as one process.
+# The three N=16384 double grids use about 6 GiB total, so 32 GB is sufficient.
+#PBS -l select=1:ncpus=16:mem=32gb
+#PBS -l walltime=08:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "$PBS_O_WORKDIR"
+JOB_RESULTS_DIR="results/serial_size_sweep"
+JOB_BIN_DIR="bin/serial_size_sweep"
+rm -rf -- "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+mkdir -p "$JOB_RESULTS_DIR" "$JOB_BIN_DIR"
+export RESULTS_DIR="$JOB_RESULTS_DIR" BIN_DIR="$JOB_BIN_DIR"
+
+if command -v module >/dev/null 2>&1; then
+  module load gcc 2>/dev/null || true
+  module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+fi
+
+if ! command -v mpicxx >/dev/null 2>&1; then
+  echo "ERROR: mpicxx is unavailable. Load Vanda's GCC/OpenMPI modules."
+  exit 1
+fi
+
+chmod +x ./run_serial_size_sweep.sh
+echo "Serial size sweep allocated on: $(hostname) at $(date)"
+echo "PBS job ID: ${PBS_JOBID:-N/A}"
+module list 2>&1 || true
+echo "CPU details:"
+lscpu 2>&1 || true
+
+./run_serial_size_sweep.sh "${SERIAL_STEPS:-1000}" \
+  "${SERIAL_LAMBDA:-0.05}" "${SERIAL_MAX_ITERS:-25}" "${SERIAL_TOL:-1e-5}"
+
+echo "Serial size sweep finished at: $(date)"
+echo "Results: $(pwd)/$JOB_RESULTS_DIR/"
