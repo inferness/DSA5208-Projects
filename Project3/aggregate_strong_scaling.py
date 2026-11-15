@@ -13,9 +13,11 @@ MEASUREMENTS = {
     "speedup": "mean_speedup",
     "efficiency": "mean_efficiency",
     "avg_rank_comp_time_s": "mean_avg_rank_comp_time_s",
-    "max_rank_comp_time_s": "mean_max_rank_comp_time_s",
     "avg_rank_comm_time_s": "mean_avg_rank_comm_time_s",
-    "max_rank_comm_time_s": "mean_max_rank_comm_time_s",
+    "avg_rank_halo_exchange_time_s": "mean_avg_rank_halo_exchange_time_s",
+    "avg_rank_halo_post_time_s": "mean_avg_rank_halo_post_time_s",
+    "avg_rank_halo_wait_time_s": "mean_avg_rank_halo_wait_time_s",
+    "avg_rank_allreduce_time_s": "mean_avg_rank_allreduce_time_s",
     "total_jacobi_iters": "mean_total_jacobi_iters",
 }
 
@@ -60,8 +62,9 @@ def main():
         reader = csv.DictReader(csv_file)
         required = {
             "N", "steps", "mpi_ranks", "run", "execution_time_s", "speedup",
-            "efficiency", "avg_rank_comp_time_s", "max_rank_comp_time_s",
-            "avg_rank_comm_time_s", "max_rank_comm_time_s",
+            "efficiency", "avg_rank_comp_time_s", "avg_rank_comm_time_s",
+            "avg_rank_halo_exchange_time_s", "avg_rank_halo_post_time_s",
+            "avg_rank_halo_wait_time_s", "avg_rank_allreduce_time_s",
             "total_jacobi_iters", "max_residual",
         }
         missing = required.difference(reader.fieldnames or [])
@@ -76,8 +79,9 @@ def main():
         "mean_execution_time_s", "stddev_execution_time_s",
         "min_execution_time_s", "max_execution_time_s",
         "mean_speedup", "mean_efficiency",
-        "mean_avg_rank_comp_time_s", "mean_max_rank_comp_time_s",
-        "mean_avg_rank_comm_time_s", "mean_max_rank_comm_time_s",
+        "mean_avg_rank_comp_time_s", "mean_avg_rank_comm_time_s",
+        "mean_avg_rank_halo_exchange_time_s", "mean_avg_rank_halo_post_time_s",
+        "mean_avg_rank_halo_wait_time_s", "mean_avg_rank_allreduce_time_s",
         "mean_total_jacobi_iters", "max_residual",
     ]
     output_path.parent.mkdir(parents=True, exist_ok=True)
